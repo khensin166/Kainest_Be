@@ -6,3 +6,4 @@ Database	Supabase	Free 500MB
 Image Storage	Cloudinary	Free 2GB
 Auth (opsional)	Supabase Auth	Gratis
 Custom Domain	Cloudflare DNS	Gratis SSL & DNS
+Yash
