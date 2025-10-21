@@ -61,6 +61,7 @@ model User {
   password    String?
   name        String?
   createdAt   DateTime     @default(now())
+  updatedAt   DateTime?     @updatedAt
 
   todos       Todo[]
   photos      Photo[]

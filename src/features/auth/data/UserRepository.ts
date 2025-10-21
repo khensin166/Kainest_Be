@@ -29,4 +29,26 @@ export const userRepository = {
       throw error // Biarkan use-case menangani error
     }
   },
+
+  async findById(id: string) {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id },
+        // Pilih data yang ingin dikembalikan
+        // PENTING: JANGAN sertakan 'password'
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          createdAt: true,
+          updatedAt: true
+          // Tambahkan field lain jika perlu (misal: avatarUrl)
+        }
+      })
+      return user // Akan null jika tidak ditemukan
+    } catch (error) {
+      console.error(error)
+      return null
+    }
+  }
 }
