@@ -1,5 +1,5 @@
 // RegisterUserUseCase.ts
-import { userRepository } from '../../data/UserRepository'
+import { userRepository } from '../../data/UserRepository.js'
 import bcrypt from 'bcryptjs'
 
 export const registerUserUseCase = async (data: { email: string; password: string }) => {

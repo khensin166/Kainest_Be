@@ -1,5 +1,5 @@
 // LoginUserUseCase.ts
-import { userRepository } from '../../data/UserRepository'
+import { userRepository } from '../../data/UserRepository.js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 

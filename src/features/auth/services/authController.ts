@@ -1,7 +1,7 @@
 // authController.ts
 import { Context } from 'hono'
-import { registerUserUseCase } from '../domain/use-cases/RegisterUserUseCase'
-import { loginUserUseCase } from '../domain/use-cases/LoginUserUseCase'
+import { registerUserUseCase } from '../domain/use-cases/RegisterUserUseCase.js'
+import { loginUserUseCase } from '../domain/use-cases/LoginUserUseCase.js'
 
 export const registerController = async (c: Context) => {
   const body = await c.req.json()

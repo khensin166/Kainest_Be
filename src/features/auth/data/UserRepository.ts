@@ -1,5 +1,5 @@
 // Impor klien prisma, bukan supabase
-import { prisma } from '../../../infrastructure/database/prisma'
+import { prisma } from '../../../infrastructure/database/prisma.js'
 // Ganti tipe 'user' jika perlu, sesuaikan dengan model Prisma Anda
 import { User } from '@prisma/client' 
 

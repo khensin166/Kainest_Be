@@ -1,6 +1,6 @@
 // app.ts
 import { Hono } from 'hono'
-import { authRoute } from './features/auth/presentation/authRoute'
+import { authRoute } from './features/auth/presentation/authRoute.js'
 import { cors } from 'hono/cors'
 
 export const app = new Hono()
