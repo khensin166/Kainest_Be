@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Couple {
+  id          String   @id @default(uuid())
+  user1Id     String
+  user2Id     String
+  createdAt   DateTime @default(now())
+
+  user1       User     @relation("User1Couple", fields: [user1Id], references: [id])
+  user2       User     @relation("User2Couple", fields: [user2Id], references: [id])
+
+  todos       Todo[]
+  photos      Photo[]
+}
+
+model Todo {
+  id          String   @id @default(uuid())
+  title       String
+  completed   Boolean  @default(false)
+  coupleId    String?
+  userId      String
+  createdAt   DateTime @default(now())
+
+  couple      Couple?  @relation(fields: [coupleId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Photo {
+  id          String   @id @default(uuid())
+  imageUrl    String
+  caption     String?
+  coupleId    String?
+  uploadedBy  String
+  createdAt   DateTime @default(now())
+
+  couple      Couple?  @relation(fields: [coupleId], references: [id])
+  uploader    User     @relation(fields: [uploadedBy], references: [id])
+}
+
+model UserProfile {
+  id             String   @id @default(uuid())
+  displayName    String?
+  avatarUrl      String?
+  invitationCode String?
+  createdAt      DateTime @default(now())
+
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id])
+}
+
+model User {
+  id          String       @id @default(uuid())
+  email       String       @unique
+  password    String?
+  name        String?
+  createdAt   DateTime     @default(now())
+
+  todos       Todo[]
+  photos      Photo[]
+  profile     UserProfile?
+  couples1    Couple[]     @relation("User1Couple")
+  couples2    Couple[]     @relation("User2Couple")
+}
