@@ -1,16 +1,32 @@
-// UserRepository.ts
-import { supabase } from '../../../infrastructure/database/supabaseClient'
+// Impor klien prisma, bukan supabase
+import { prisma } from '../../../infrastructure/database/prisma'
+// Ganti tipe 'user' jika perlu, sesuaikan dengan model Prisma Anda
+import { User } from '@prisma/client' 
 
 export const userRepository = {
   async findByEmail(email: string) {
-    const { data, error } = await supabase.from('users').select('*').eq('email', email).single()
-    if (error) return null
-    return data
+    try {
+      const user = await prisma.user.findUnique({
+        where: { email },
+      })
+      return user // Akan null jika tidak ditemukan
+    } catch (error) {
+      console.error(error)
+      return null
+    }
   },
 
-  async create(user: { email: string; password: string }) {
-    const { data, error } = await supabase.from('users').insert(user).select().single()
-    if (error) throw error
-    return data
+  async create(userData: Omit<User, 'id' | 'createdAt' | 'updatedAt' | 'name'>) { 
+    // Sesuaikan tipe 'userData' dengan apa yang dibutuhkan
+    // untuk membuat user baru di skema Prisma Anda
+    try {
+      const user = await prisma.user.create({
+        data: userData,
+      })
+      return user
+    } catch (error) {
+      console.error(error)
+      throw error // Biarkan use-case menangani error
+    }
   },
 }
