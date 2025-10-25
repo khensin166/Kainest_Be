@@ -48,7 +48,7 @@ model UserProfile {
   id             String   @id @default(uuid())
   displayName    String?
   avatarUrl      String?
-  invitationCode String?
+  invitationCode String?  @unique
   createdAt      DateTime @default(now())
 
   userId         String   @unique
