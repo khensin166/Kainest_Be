@@ -5,9 +5,10 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx src/server.ts", 
+    "dev": "tsx src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js" 
+    "start": "node dist/server.js",
+    "seed": "npx prisma db seed"
   },
   "keywords": [],
   "author": "",
@@ -25,8 +26,12 @@
   },
   "devDependencies": {
     "@types/node": "^24.9.1",
+    "ts-node": "^10.9.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "wrangler": "^4.43.0"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }

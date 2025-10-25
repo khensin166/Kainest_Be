@@ -63,9 +63,55 @@ model User {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime?     @updatedAt
 
+  // --- TAMBAHAN UNTUK BOT ---
+  phone_number String? @unique
+  shifts       UserShift[]
+  logs         NotificationLog[]
+  // -------------------------
+
   todos       Todo[]
   photos      Photo[]
   profile     UserProfile?
   couples1    Couple[]     @relation("User1Couple")
   couples2    Couple[]     @relation("User2Couple")
+}
+
+// --- MODEL BARU UNTUK BOT ---
+
+// Menyimpan jadwal shift per user, hasil import dari Google Sheet
+model UserShift {
+  id         String   @id @default(uuid())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  date       DateTime @db.Date // Hanya tanggal, tanpa waktu
+  shift_type String   // "1", "2", "3", "LS", dll.
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, date]) // Pastikan 1 user hanya punya 1 shift per hari
+}
+
+// Template untuk setiap aktivitas (sesuai dokumenmu)
+model ShiftActivity {
+  id            String   @id @default(uuid())
+  shift_type    String   // "1", "2", atau "3"
+  activity_name String   // "Bangun", "Sarapan", dll.
+  time_start    String   // "04:30" (disimpan sebagai string HH:mm)
+  reminder_time String   // "04:00" (disimpan sebagai string HH:mm)
+  note          String?
+
+  logs NotificationLog[]
+
+  @@unique([shift_type, reminder_time]) // Pastikan tidak ada duplikat pengingat
+}
+
+// Log untuk mencatat pesan yang sudah terkirim
+model NotificationLog {
+  id         String        @id @default(uuid())
+  user       User          @relation(fields: [userId], references: [id])
+  userId     String
+  activity   ShiftActivity @relation(fields: [activityId], references: [id])
+  activityId String
+  sent_at    DateTime      @default(now()) // Waktu pesan terkirim
+
+  @@unique([userId, activityId, sent_at])
 }
