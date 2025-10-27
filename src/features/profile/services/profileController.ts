@@ -1,3 +1,4 @@
+// src\features\profile\services\profileController.ts
 import { Context } from 'hono'
 import { getProfileUseCase } from '../domain/use-cases/GetProfileUseCase.js'
 import { updateProfileUseCase } from '../domain/use-cases/UpdateProfileUseCase.js'

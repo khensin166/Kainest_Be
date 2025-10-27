@@ -1,9 +1,11 @@
+// src\features\profile\domain\use-cases\UpdateProfileUseCase.ts
 import { profileRepository } from '../../data/ProfileRepository.js'
 
 type ProfileUpdateData = {
   name?: string;
   displayName?: string;
   avatarUrl?: string;
+  phone_number?: string;
 }
 
 export const updateProfileUseCase = async (userId: string, data: ProfileUpdateData) => {

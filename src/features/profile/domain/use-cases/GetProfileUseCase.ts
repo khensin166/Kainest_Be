@@ -1,3 +1,4 @@
+// src\features\profile\domain\use-cases\GetProfileUseCase.ts
 import { profileRepository } from '../../data/ProfileRepository.js'
 
 export const getProfileUseCase = async (userId: string) => {

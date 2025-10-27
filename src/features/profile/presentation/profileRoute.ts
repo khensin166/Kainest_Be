@@ -1,6 +1,7 @@
+// src\features\profile\presentation\profileRoute.ts
 import { Hono } from 'hono'
 import { authMiddleware } from '../../auth/presentation/authMiddleware.js'
-import { getProfileController, updateProfileController } from '../services/profileController.js'
+import { getProfileController, updateProfileController, getUploadSignatureController } from '../services/profileController.js'
 
 export const profileRoute = new Hono()
 
@@ -12,3 +13,6 @@ profileRoute.get('/', getProfileController)
 
 // PATCH /profile -> Update data diri
 profileRoute.patch('/', updateProfileController)
+
+// Endpoint untuk mendapatkan 'izin' upload
+profileRoute.post('/signature', getUploadSignatureController)

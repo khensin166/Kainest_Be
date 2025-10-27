@@ -1,3 +1,4 @@
+// src\features\profile\data\ProfileRepository.ts
 import { prisma } from '../../../infrastructure/database/prisma.js'
 import { generateInviteCode } from '../../../utils/stringUtils.js'
 
