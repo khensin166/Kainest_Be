@@ -6,6 +6,7 @@ type ProfileUpdateData = {
   name?: string; // Dari model User
   displayName?: string; // Dari model UserProfile
   avatarUrl?: string; // Dari model UserProfile
+  phone_number?: string;
 }
 
 export const profileRepository = {
@@ -46,13 +47,14 @@ export const profileRepository = {
    * Update data User dan UserProfile dalam satu operasi.
    */
   async updateProfileByUserId(userId: string, data: ProfileUpdateData) {
-    const { name, ...profileData } = data
+    const { name, phone_number, ...profileData } = data
 
     // Gunakan nested write untuk update User dan UserProfile sekaligus
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
         name: name, // Update 'name' di model User
+        phone_number: phone_number,
         profile: {
           // 'upsert' akan create jika tidak ada, atau update jika ada
           upsert: {
