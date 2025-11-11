@@ -1,3 +1,4 @@
+// src/features/couple/services/coupleController.ts
 import { Context } from 'hono'
 import { getCoupleStatusUseCase } from '../domain/use-cases/GetCoupleStatusUseCase.js'
 import { connectCoupleUseCase } from '../domain/use-cases/ConnectCoupleUseCase.js'

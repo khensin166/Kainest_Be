@@ -1,3 +1,4 @@
+// src/features/couple/domain/use-cases/GetCoupleStatusUseCase.ts
 import { coupleRepository } from '../../data/CoupleRepository.js'
 
 export const getCoupleStatusUseCase = async (userId: string) => {

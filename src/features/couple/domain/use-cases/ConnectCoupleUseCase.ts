@@ -1,3 +1,4 @@
+// src/features/couple/domain/use-cases/ConnectCoupleUseCase.ts
 import { coupleRepository } from '../../data/CoupleRepository.js'
 
 export const connectCoupleUseCase = async (currentUserId: string, invitationCode: string) => {

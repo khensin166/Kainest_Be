@@ -1,3 +1,4 @@
+// src/features/couple/data/CoupleRepository.ts
 import { prisma } from '../../../infrastructure/database/prisma.js'
 
 export const coupleRepository = {

@@ -65,4 +65,36 @@ export const userRepository = {
       return null;
     }
   },
+
+  /**
+   * Mengambil data user lengkap, termasuk password hash
+   */
+  async findUserWithPassword(id: string) {
+    try {
+      // findUnique TANPA 'select' akan mengambil semua kolom
+      const user = await prisma.user.findUnique({
+        where: { id },
+      });
+      return user; // Mengembalikan user { id, email, password, ... }
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  },
+
+  /**
+   * Meng-update password user di database
+   */
+  async updatePassword(id: string, newPasswordHash: string) {
+    try {
+      await prisma.user.update({
+        where: { id: id },
+        data: { password: newPasswordHash },
+      });
+      return true;
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
+  },
 };

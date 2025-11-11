@@ -1,3 +1,4 @@
+// src/features/couple/presentation/coupleRoute.ts
 import { Hono } from 'hono'
 import { authMiddleware } from '../../auth/presentation/authMiddleware.js'
 import { getCoupleStatusController, connectCoupleController } from '../services/coupleController.js'
