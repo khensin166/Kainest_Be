@@ -1,48 +1,46 @@
-// Impor klien prisma, bukan supabase
-import { prisma } from '../../../infrastructure/database/prisma.js'
-// Ganti tipe 'user' jika perlu, sesuaikan dengan model Prisma Anda
-import { User } from '@prisma/client' 
-import { generateInviteCode } from '../../../utils/stringUtils.js'
+// UserRepository.ts
+import { prisma } from "../../../infrastructure/database/prisma.js";
+import { User } from "@prisma/client";
+import { generateInviteCode } from "../../../utils/stringUtils.js";
 
 export const userRepository = {
   async findByEmail(email: string) {
     try {
       const user = await prisma.user.findUnique({
         where: { email },
-      })
-      return user // Akan null jika tidak ditemukan
+      });
+      return user; // Akan null jika tidak ditemukan
     } catch (error) {
-      console.error(error)
-      return null
+      console.error(error);
+      return null;
     }
   },
 
-  // GANTI FUNGSI 'CREATE' ANDA DENGAN INI
-  async create(userData: Omit<User, 'id' | 'createdAt' | 'updatedAt' | 'name' | 'phone_number' | 'shifts' | 'logs' | 'todos' | 'photos' | 'profile' | 'couples1' | 'couples2'>) { 
+  async create(data: { email: string; password: string; name?: string }) {
     try {
-      // Buat kode undangan unik
       const inviteCode = generateInviteCode();
 
       const user = await prisma.user.create({
         data: {
-          ...userData, // Ini akan menyertakan email & password
-          
-          // Secara otomatis buat UserProfile yang terhubung
+          // Data untuk model 'User'
+          email: data.email,
+          password: data.password,
+          name: data.name,
           profile: {
             create: {
               invitationCode: inviteCode,
-            }
-          }
+              displayName: data.name,
+            },
+          },
         },
-        // Kembalikan user beserta profil yang baru dibuat
         include: {
-          profile: true
-        }
-      })
-      return user
+          profile: true, // Kembalikan data lengkap
+        },
+      });
+      return user;
     } catch (error) {
-      console.error(error)
-      throw error 
+      console.error(error);
+      throw error;
     }
   },
 
@@ -57,14 +55,14 @@ export const userRepository = {
           email: true,
           name: true,
           createdAt: true,
-          updatedAt: true
+          updatedAt: true,
           // Tambahkan field lain jika perlu (misal: avatarUrl)
-        }
-      })
-      return user // Akan null jika tidak ditemukan
+        },
+      });
+      return user; // Akan null jika tidak ditemukan
     } catch (error) {
-      console.error(error)
-      return null
+      console.error(error);
+      return null;
     }
-  }
-}
+  },
+};
