@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { authRoute } from './features/auth/presentation/authRoute.js'
 import { profileRoute } from './features/profile/presentation/profileRoute.js'
 import { coupleRoute } from './features/couple/presentation/coupleRoute.js'
+import { todoRoute } from './features/todos/presentation/todoRoute.js'
 import { cors } from 'hono/cors'
 
 const app = new Hono()
@@ -14,6 +15,7 @@ app.use('*', cors())
 app.route('/auth', authRoute)
 app.route('/profile', profileRoute)
 app.route('/couple', coupleRoute)
+app.route('/todos', todoRoute)
 
 app.get('/', (c) => c.text('Hello from Kainest Backend! 🚀'))
 

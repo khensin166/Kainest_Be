@@ -16,21 +16,12 @@ model Couple {
   user1       User     @relation("User1Couple", fields: [user1Id], references: [id])
   user2       User     @relation("User2Couple", fields: [user2Id], references: [id])
 
-  todos       Todo[]
-  photos      Photo[]
+  // --- TAMBAHKAN DUA BARIS INI ---
+  todos     Todo[]       @relation("CoupleTodos") // Daftar todos milik pasangan ini
+  notes     Note[]       @relation("CoupleNotes") // Daftar notes milik pasangan ini
+  photos    Photo[]
 }
 
-model Todo {
-  id          String   @id @default(uuid())
-  title       String
-  completed   Boolean  @default(false)
-  coupleId    String?
-  userId      String
-  createdAt   DateTime @default(now())
-
-  couple      Couple?  @relation(fields: [coupleId], references: [id])
-  user        User     @relation(fields: [userId], references: [id])
-}
 
 model Photo {
   id          String   @id @default(uuid())
@@ -69,18 +60,19 @@ model User {
   logs         NotificationLog[]
   // -------------------------
 
-  todos       Todo[]
   photos      Photo[]
   profile     UserProfile?
   couples1    Couple[]     @relation("User1Couple")
   couples2    Couple[]     @relation("User2Couple")
+  todos     Todo[]       @relation("UserTodos") // Daftar todos yang dia buat
+  notes     Note[]       @relation("UserNotes") // Daftar notes yang dia tulis
 }
 
-// --- MODEL BARU UNTUK BOT ---
-
+// Database untuk integrasi WA Bot
 // Menyimpan jadwal shift per user, hasil import dari Google Sheet
 model UserShift {
-  id         String   @id @default(uuid())
+  // id         String   @id @default(uuid())
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   user       User     @relation(fields: [userId], references: [id])
   userId     String
   date       DateTime @db.Date // Hanya tanggal, tanpa waktu
@@ -114,4 +106,40 @@ model NotificationLog {
   sent_at    DateTime      @default(now()) // Waktu pesan terkirim
 
   @@unique([userId, activityId, sent_at])
+}
+
+// --- MODEL BARU UNTUK FITUR INTI ---
+
+model Todo {
+  id           String   @id @default(uuid())
+  title        String
+  description  String?
+  is_completed Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relasi: Siapa yang membuat?
+  createdById String
+  createdBy   User   @relation("UserTodos", fields: [createdById], references: [id], onDelete: Cascade)
+
+  // Relasi: Dibagikan dengan pasangan siapa?
+  coupleId String
+  couple   Couple @relation("CoupleTodos", fields: [coupleId], references: [id], onDelete: Cascade)
+}
+
+model Note {
+  id        String   @id @default(uuid())
+  title     String
+  content   Json     @db.JsonB // Sesuai rencana Anda untuk Editor.js
+  is_public Boolean  @default(false) // Untuk fitur sharing publik
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relasi: Siapa penulisnya?
+  authorId String
+  author   User   @relation("UserNotes", fields: [authorId], references: [id], onDelete: Cascade)
+
+  // Relasi: Dibagikan dengan pasangan? (Opsional)
+  coupleId String?
+  couple   Couple? @relation("CoupleNotes", fields: [coupleId], references: [id], onDelete: SetNull)
 }

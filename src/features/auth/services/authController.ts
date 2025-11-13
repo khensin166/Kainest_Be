@@ -56,11 +56,9 @@ export const changePasswordController = async (c: Context) => {
   const result = await changePasswordUseCase(userId, body);
 
   if (!result.success) {
-    // --- PERBAIKAN 3 ---
-    // Pastikan 'result.status' adalah tipe yang valid (misal: 400, 404)
     c.status(result.status as any);
-    return c.json({ success: false, message: result.message }); // 2. Kembalikan JSON
+    return c.json({ success: false, message: result.message });
   }
 
-  return c.json(result); // Ini sudah benar
+  return c.json(result); 
 };
