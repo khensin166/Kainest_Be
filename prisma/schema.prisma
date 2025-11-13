@@ -127,6 +127,11 @@ model Todo {
   couple   Couple @relation("CoupleTodos", fields: [coupleId], references: [id], onDelete: Cascade)
 }
 
+enum NotePermission {
+  VIEWER
+  EDITOR
+}
+
 model Note {
   id        String   @id @default(uuid())
   title     String
@@ -142,4 +147,7 @@ model Note {
   // Relasi: Dibagikan dengan pasangan? (Opsional)
   coupleId String?
   couple   Couple? @relation("CoupleNotes", fields: [coupleId], references: [id], onDelete: SetNull)
+
+  // Menentukan izin pasangan jika coupleId diisi
+  partnerPermission NotePermission @default(VIEWER)
 }
