@@ -3,9 +3,25 @@ import { budgetRepository } from "../../data/BudgetRepository.js";
 export const getMonthlySummaryUseCase = async (userId: string) => {
   try {
     // 1. Tentukan Range Tanggal (Bulan Ini)
+    // KODE BARU (Konsisten UTC di manapun)
     const now = new Date();
-    const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    // 1. startDate: Gunakan Date.UTC untuk memaksa jam 00:00:00 UTC persis
+    const startDate = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+    );
+
+    // 2. endDate: Ambil awal bulan depan UTC, lalu kurangi 1 milidetik
+    const nextMonthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+    );
+    const endDate = new Date(nextMonthStart.getTime() - 1); // Ini akan jadi tgl terakhir bulan ini jam 23:59:59.999 UTC
+
+    // LOG CCTV (Untuk memastikan hasilnya konsisten 00:00:00Z di Vercel nanti)
+    console.log("=================[DEBUG SUMMARY UTC FIX]=================");
+    console.log(
+      `📅 Periode (UTC Forced): ${startDate.toISOString()} s/d ${endDate.toISOString()}`
+    );
 
     // 🔥 CCTV 1: Cek User ID dan Periode Tanggal
     console.log("=================[DEBUG SUMMARY]=================");
