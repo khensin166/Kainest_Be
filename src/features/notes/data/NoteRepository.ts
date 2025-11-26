@@ -1,3 +1,4 @@
+// src/features/notes/data/NoteRepository.ts
 import { prisma } from "../../../infrastructure/database/prisma.js";
 import { Prisma, NotePermission } from "@prisma/client";
 

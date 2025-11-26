@@ -1,3 +1,4 @@
+// src/features/notes/services/noteController.ts
 import { Context } from "hono";
 import { coupleRepository } from "../../couple/data/CoupleRepository.js";
 import { getNotesUseCase } from "../domain/use-cases/GetNotesUseCase.js";

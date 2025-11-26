@@ -1,3 +1,4 @@
+// src/features/notes/domain/use-cases/CreateNoteUseCase.ts
 import { noteRepository } from '../../data/NoteRepository.js'
 import { Prisma, NotePermission } from '@prisma/client'
 

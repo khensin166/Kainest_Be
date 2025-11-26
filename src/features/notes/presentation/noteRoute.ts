@@ -1,3 +1,4 @@
+// noteRoute.ts
 import { Hono } from "hono";
 import { authMiddleware } from "../../auth/presentation/authMiddleware.js";
 import {
