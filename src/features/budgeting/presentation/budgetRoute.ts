@@ -10,6 +10,10 @@ import {
   seedCategoriesController,
   evaluateBudgetController,
   getTrendController,
+  getTransactionsController,
+  getTransactionDetailController,
+  updateTransactionController,
+  deleteTransactionController,
 } from "../services/budgetController.js";
 
 export const budgetRoute = new Hono();
@@ -22,6 +26,18 @@ budgetRoute.get("/categories", getCategoriesController);
 
 // 2. Input Transaksi Baru
 budgetRoute.post("/transactions", createTransactionController);
+
+// BARU: GET /api/budget/transactions (Read List)
+budgetRoute.get("/transactions", getTransactionsController);
+
+// GET Detail
+budgetRoute.get("/transactions/:id", getTransactionDetailController);
+
+// PUT Update
+budgetRoute.put("/transactions/:id", updateTransactionController);
+
+// DELETE Hapus
+budgetRoute.delete("/transactions/:id", deleteTransactionController);
 
 // 3. Cek Status Budget (Hitung Zone Hijau/Merah)
 // Frontend panggil ini saat user pilih kategori "Makan" di dashboard

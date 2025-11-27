@@ -7,7 +7,10 @@ import { getAiAdvisorUseCase } from "../domain/use-cases/GetAiAdvisorUseCase.js"
 import { getSpendingTrendUseCase } from "../domain/use-cases/GetSpendingTrendUseCase.js";
 import { evaluateMonthlyBudgetUseCase } from "../domain/use-cases/EvaluateMonthlyBudgetUseCase.js";
 import { budgetRepository } from "../data/BudgetRepository.js";
-
+import { getTransactionsUseCase } from "../domain/use-cases/GetTransactionsUseCase.js";
+import { getTransactionDetailUseCase } from "../domain/use-cases/GetTransactionDetailUseCase.js";
+import { updateTransactionUseCase } from "../domain/use-cases/UpdateTransactionUseCase.js";
+import { deleteTransactionUseCase } from "../domain/use-cases/DeleteTransactionUseCase.js";
 // === Create Transaction ===
 export const createTransactionController = async (c: Context) => {
   const userId = c.get("userId"); // Dari authMiddleware
@@ -98,7 +101,7 @@ export const seedCategoriesController = async (c: Context) => {
 export const evaluateBudgetController = async (c: Context) => {
   const userId = c.get("userId");
   const result = await evaluateMonthlyBudgetUseCase(userId);
-  
+
   if (!result.success) c.status(500);
   return c.json(result);
 };
@@ -106,8 +109,61 @@ export const evaluateBudgetController = async (c: Context) => {
 // === Get Daily Trend untuk Grafik ===
 export const getTrendController = async (c: Context) => {
   const userId = c.get("userId");
-  
+
   const result = await getSpendingTrendUseCase(userId);
+
+  if (!result.success) c.status(result.status as any);
+  return c.json(result);
+};
+
+// === Get List Transactions (dengan filter & pagination) ===
+export const getTransactionsController = async (c: Context) => {
+  const userId = c.get("userId");
+
+  // Ambil query parameters dari URL (misal: ?page=1&limit=10&startDate=2025-11-01)
+  const { page, limit, startDate, endDate } = c.req.query();
+
+  const result = await getTransactionsUseCase({
+    userId,
+    page,
+    limit,
+    startDate,
+    endDate,
+  });
+
+  if (!result.success) c.status(result.status as any);
+  return c.json(result);
+};
+
+// === GET Detail Transaction (:id) ===
+export const getTransactionDetailController = async (c: Context) => {
+  const userId = c.get("userId");
+  const transactionId = c.req.param("id"); // Ambil ID dari URL
+
+  const result = await getTransactionDetailUseCase(transactionId, userId);
+
+  if (!result.success) c.status(result.status as any);
+  return c.json(result);
+};
+
+// === PUT Update Transaction (:id) ===
+export const updateTransactionController = async (c: Context) => {
+  const userId = c.get("userId");
+  const transactionId = c.req.param("id");
+  const body = await c.req.json(); // Ambil data update dari body
+
+  const result = await updateTransactionUseCase(transactionId, userId, body);
+
+  if (!result.success) c.status(result.status as any);
+  return c.json(result);
+};
+
+// === DELETE Transaction (:id) ===
+export const deleteTransactionController = async (c: Context) => {
+  const userId = c.get("userId");
+  const transactionId = c.req.param("id");
+
+  const result = await deleteTransactionUseCase(transactionId, userId);
 
   if (!result.success) c.status(result.status as any);
   return c.json(result);

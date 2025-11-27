@@ -28,7 +28,12 @@ export const transactionRepository = {
    * Menghitung TOTAL pengeluaran user per kategori di bulan tertentu
    * Ini vital untuk logic "Sisa Budget"
    */
-  async sumExpenseByCategory(userId: string, categoryId: string, startDate: Date, endDate: Date) {
+  async sumExpenseByCategory(
+    userId: string,
+    categoryId: string,
+    startDate: Date,
+    endDate: Date
+  ) {
     const aggregate = await prisma.transaction.aggregate({
       _sum: {
         amount: true,
@@ -38,7 +43,7 @@ export const transactionRepository = {
         categoryId: categoryId,
         date: {
           gte: startDate, // Awal bulan
-          lte: endDate,   // Akhir bulan/hari ini
+          lte: endDate, // Akhir bulan/hari ini
         },
       },
     });
@@ -46,25 +51,9 @@ export const transactionRepository = {
     return aggregate._sum.amount || 0;
   },
 
-  /**
-   * Ambil history transaksi (untuk list di UI)
-   */
-  async findTransactions(userId: string, limit = 10) {
-    return prisma.transaction.findMany({
-      where: { userId },
-      orderBy: { date: 'desc' },
-      take: limit,
-      include: {
-        category: {
-          select: { name: true, icon: true }
-        }
-      }
-    });
-  }, 
-  
   async getDailyTrend(userId: string, startDate: Date, endDate: Date) {
     return prisma.transaction.groupBy({
-      by: ['date'], // Kelompokkan berdasarkan kolom tanggal
+      by: ["date"], // Kelompokkan berdasarkan kolom tanggal
       _sum: {
         amount: true, // Jumlahkan kolom amount
       },
@@ -76,8 +65,99 @@ export const transactionRepository = {
         },
       },
       orderBy: {
-        date: 'asc', // Urutkan dari tanggal awal bulan
+        date: "asc", // Urutkan dari tanggal awal bulan
       },
     });
-  }
+  },
+
+  async findTransactions({
+    userId,
+    startDate,
+    endDate,
+    skip,
+    take,
+  }: {
+    userId: string;
+    startDate?: Date; // Opsional
+    endDate?: Date; // Opsional
+    skip: number;
+    take: number;
+  }) {
+    // 1. Bangun kondisi WHERE secara dinamis
+    const whereClause: any = {
+      userId: userId,
+    };
+
+    // Jika ada filter tanggal, tambahkan ke kondisi WHERE
+    if (startDate && endDate) {
+      whereClause.date = {
+        gte: startDate,
+        lte: endDate,
+      };
+    }
+
+    // 2. Jalankan query findMany (data) dan count (total) secara paralel
+    const [transactions, totalCount] = await prisma.$transaction([
+      prisma.transaction.findMany({
+        where: whereClause,
+        skip: skip, // Loncat sekian data (offset)
+        take: take, // Ambil sekian data (limit)
+        orderBy: {
+          date: "desc", // Urutkan dari yang paling baru
+        },
+        // Include data kategori agar di UI bisa tampil ikon dan namanya
+        include: {
+          category: {
+            select: { id: true, name: true, icon: true, type: true },
+          },
+        },
+      }),
+      prisma.transaction.count({
+        where: whereClause,
+      }),
+    ]);
+
+    return {
+      data: transactions,
+      total: totalCount,
+    };
+  },
+
+  /**
+   * BARU: Mencari satu transaksi berdasarkan ID dan User ID (untuk keamanan)
+   */
+  async findTransactionById(id: string, userId: string) {
+    return prisma.transaction.findFirst({
+      where: {
+        id: id,
+        userId: userId, // Pastikan user hanya bisa lihat transaksinya sendiri
+      },
+      include: {
+        category: true, // Include kategori untuk data lengkap
+      },
+    });
+  },
+
+  /**
+   * BARU: Update data transaksi
+   */
+  async updateTransaction(
+    id: string,
+    data: { amount?: number; categoryId?: string; note?: string; date?: Date }
+  ) {
+    return prisma.transaction.update({
+      where: { id: id },
+      data: data,
+      include: { category: true },
+    });
+  },
+
+  /**
+   * BARU: Hapus transaksi
+   */
+  async deleteTransaction(id: string) {
+    return prisma.transaction.delete({
+      where: { id: id },
+    });
+  },
 };
