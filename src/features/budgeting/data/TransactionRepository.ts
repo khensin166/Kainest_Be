@@ -60,5 +60,24 @@ export const transactionRepository = {
         }
       }
     });
+  }, 
+  
+  async getDailyTrend(userId: string, startDate: Date, endDate: Date) {
+    return prisma.transaction.groupBy({
+      by: ['date'], // Kelompokkan berdasarkan kolom tanggal
+      _sum: {
+        amount: true, // Jumlahkan kolom amount
+      },
+      where: {
+        userId: userId,
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      orderBy: {
+        date: 'asc', // Urutkan dari tanggal awal bulan
+      },
+    });
   }
 };

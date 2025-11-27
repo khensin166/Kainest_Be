@@ -4,6 +4,7 @@ import { getDailyBudgetStatusUseCase } from "../domain/use-cases/GetDailyBudgetS
 import { setupMonthlyBudgetUseCase } from "../domain/use-cases/SetupMonthlyBudgetUseCase.js";
 import { getMonthlySummaryUseCase } from "../domain/use-cases/GetMonthlySummaryUseCase.js";
 import { getAiAdvisorUseCase } from "../domain/use-cases/GetAiAdvisorUseCase.js";
+import { getSpendingTrendUseCase } from "../domain/use-cases/GetSpendingTrendUseCase.js";
 import { evaluateMonthlyBudgetUseCase } from "../domain/use-cases/EvaluateMonthlyBudgetUseCase.js";
 import { budgetRepository } from "../data/BudgetRepository.js";
 
@@ -99,5 +100,15 @@ export const evaluateBudgetController = async (c: Context) => {
   const result = await evaluateMonthlyBudgetUseCase(userId);
   
   if (!result.success) c.status(500);
+  return c.json(result);
+};
+
+// === Get Daily Trend untuk Grafik ===
+export const getTrendController = async (c: Context) => {
+  const userId = c.get("userId");
+  
+  const result = await getSpendingTrendUseCase(userId);
+
+  if (!result.success) c.status(result.status as any);
   return c.json(result);
 };

@@ -9,6 +9,7 @@ import {
   getAiAdviceController,
   seedCategoriesController,
   evaluateBudgetController,
+  getTrendController,
 } from "../services/budgetController.js";
 
 export const budgetRoute = new Hono();
@@ -42,3 +43,6 @@ budgetRoute.post("/seed-categories", seedCategoriesController);
 // POST /api/budget/evaluate
 // Dipanggil saat tombol "Tutup Buku Bulan Ini" ditekan user
 budgetRoute.post("/evaluate", evaluateBudgetController);
+
+// Ambil Data Tren Harian (GET) -> Untuk Grafik Dashboard
+budgetRoute.get("/trend", getTrendController);
