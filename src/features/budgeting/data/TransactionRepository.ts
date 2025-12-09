@@ -1,3 +1,4 @@
+// TransactionRepository.ts
 import { prisma } from "../../../infrastructure/database/prisma.js";
 import { Prisma } from "@prisma/client";
 
@@ -74,12 +75,14 @@ export const transactionRepository = {
     userId,
     startDate,
     endDate,
+    search,
     skip,
     take,
   }: {
     userId: string;
-    startDate?: Date; // Opsional
-    endDate?: Date; // Opsional
+    startDate?: Date;
+    endDate?: Date;
+    search?: string;
     skip: number;
     take: number;
   }) {
@@ -94,6 +97,27 @@ export const transactionRepository = {
         gte: startDate,
         lte: endDate,
       };
+    }
+
+    // Filter Search (Case Insensitive)
+    // Mencari di kolom 'note' ATAU nama 'category'
+    if (search) {
+      whereClause.OR = [
+        {
+          note: {
+            contains: search,
+            mode: "insensitive", // PostgreSQL only: makes search case-insensitive
+          },
+        },
+        {
+          category: {
+            name: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
+      ];
     }
 
     // 2. Jalankan query findMany (data) dan count (total) secara paralel

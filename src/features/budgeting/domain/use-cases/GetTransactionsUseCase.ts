@@ -6,14 +6,15 @@ interface GetTransactionsInput {
   limit?: string;    // Query param selalu string
   startDate?: string; // Format YYYY-MM-DD
   endDate?: string;   // Format YYYY-MM-DD
+  search?: string;
 }
 
 export const getTransactionsUseCase = async (input: GetTransactionsInput) => {
   try {
     // 1. Normalisasi Input Pagination
-    const page = Number(input.page) || 1; // Default page 1
-    const take = Number(input.limit) || 20; // Default limit 20 item per halaman
-    const skip = (page - 1) * take; // Hitung offset
+    const page = Number(input.page) || 1;
+    const take = Number(input.limit) || 20; 
+    const skip = (page - 1) * take;
 
     // 2. Normalisasi Input Tanggal (Filter)
     let filterStartDate: Date | undefined;
@@ -38,6 +39,7 @@ export const getTransactionsUseCase = async (input: GetTransactionsInput) => {
       userId: input.userId,
       startDate: filterStartDate,
       endDate: filterEndDate,
+      search: input.search,
       skip,
       take,
     });

@@ -120,8 +120,8 @@ export const getTrendController = async (c: Context) => {
 export const getTransactionsController = async (c: Context) => {
   const userId = c.get("userId");
 
-  // Ambil query parameters dari URL (misal: ?page=1&limit=10&startDate=2025-11-01)
-  const { page, limit, startDate, endDate } = c.req.query();
+  // URL contoh: /budget/transactions?page=1&limit=10&search=soto
+  const { page, limit, startDate, endDate, search } = c.req.query();
 
   const result = await getTransactionsUseCase({
     userId,
@@ -129,6 +129,7 @@ export const getTransactionsController = async (c: Context) => {
     limit,
     startDate,
     endDate,
+    search,
   });
 
   if (!result.success) c.status(result.status as any);

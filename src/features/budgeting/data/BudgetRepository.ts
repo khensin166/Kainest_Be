@@ -1,3 +1,4 @@
+// BudgetRepository.ts
 import { prisma } from "../../../infrastructure/database/prisma.js";
 
 export const budgetRepository = {
