@@ -208,3 +208,14 @@ model AISuggestion {
 
   createdAt DateTime @default(now())
 }
+
+model WaBotConfig {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  baseUrl     String
+  adminSecret String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("wa_bot_configs")
+}
