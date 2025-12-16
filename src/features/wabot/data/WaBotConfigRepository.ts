@@ -1,26 +1,30 @@
-import { prisma } from '../../../infrastructure/database/prisma.js';
+import { prisma } from "../../../infrastructure/database/prisma.js";
 
-export class WaBotConfigRepository {
+export const waBotConfigRepository = {
+  /**
+   * Menyimpan atau memperbarui konfigurasi bot
+   */
   async upsertConfig(userId: string, baseUrl: string, adminSecret?: string) {
     return prisma.waBotConfig.upsert({
       where: { userId },
-      // Update jika data sudah ada
-      update: { 
-        baseUrl, 
-        adminSecret 
+      update: {
+        baseUrl,
+        adminSecret,
       },
-      // Buat baru jika belum ada
-      create: { 
-        userId, 
-        baseUrl, 
-        adminSecret 
+      create: {
+        userId,
+        baseUrl,
+        adminSecret,
       },
     });
-  }
+  },
 
+  /**
+   * Mengambil konfigurasi bot berdasarkan User ID
+   */
   async getConfig(userId: string) {
     return prisma.waBotConfig.findUnique({
       where: { userId },
     });
-  }
-}
+  },
+};

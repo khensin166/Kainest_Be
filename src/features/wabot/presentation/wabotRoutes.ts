@@ -1,10 +1,17 @@
 import { Hono } from "hono";
-import * as controller from "../services/WaBotConfigController.js";
-// import authMiddleware ...
+import { authMiddleware } from "../../auth/presentation/authMiddleware.js";
+import {
+  saveConfigController,
+  getConfigController,
+} from "../services/WaBotConfigController.js";
 
-const app = new Hono();
+export const wabotRoute = new Hono();
 
-app.post("/config", controller.saveConfig);
-app.get("/config", controller.getConfig);
+// Lindungi semua rute wabot dengan authMiddleware
+wabotRoute.use("*", authMiddleware);
 
-export default app;
+// POST /wabot/config -> Simpan/Update konfigurasi
+wabotRoute.post("/config", saveConfigController);
+
+// GET /wabot/config -> Ambil konfigurasi
+wabotRoute.get("/config", getConfigController);

@@ -1,42 +1,35 @@
-import { Context } from 'hono';
-import { WaBotConfigRepository } from '../data/WaBotConfigRepository.js';
-import { SaveConfigUseCase } from '../domain/use-cases/SaveConfigUseCase.js';
-import { GetConfigUseCase } from '../domain/use-cases/GetConfigUseCase.js';
+import { Context } from "hono";
+import { saveConfigUseCase } from "../domain/use-cases/SaveConfigUseCase.js";
+import { getConfigUseCase } from "../domain/use-cases/GetConfigUseCase.js";
 
-const repository = new WaBotConfigRepository();
+export const saveConfigController = async (c: Context) => {
+  const userId = c.get("userId"); // Diambil dari authMiddleware
+  const body = await c.req.json();
 
-export const saveConfig = async (c: Context) => {
-  try {
-    const user = c.get('user'); // Pastikan middleware auth sudah berjalan
-    const userId = user.id; 
-    
-    // Ambil data dari body request
-    const { baseUrl, adminSecret } = await c.req.json();
-
-    // Validasi sederhana
-    if (!baseUrl) {
-      return c.json({ status: 'error', message: 'Base URL wajib diisi' }, 400);
-    }
-
-    const useCase = new SaveConfigUseCase(repository);
-    const result = await useCase.execute(userId, baseUrl, adminSecret);
-
-    return c.json({ status: 'success', data: result });
-  } catch (e: any) {
-    return c.json({ status: 'error', message: e.message }, 500);
+  // Validasi Input Dasar
+  if (!body.baseUrl) {
+    return c.json({ success: false, message: "Base URL wajib diisi" }, 400);
   }
+
+  const result = await saveConfigUseCase(
+    userId,
+    body.baseUrl,
+    body.adminSecret
+  );
+
+  if (!result.success) {
+    c.status(result.status as any);
+  }
+  return c.json(result);
 };
 
-export const getConfig = async (c: Context) => {
-  try {
-    const user = c.get('user');
-    const userId = user.id;
+export const getConfigController = async (c: Context) => {
+  const userId = c.get("userId");
 
-    const useCase = new GetConfigUseCase(repository);
-    const result = await useCase.execute(userId);
+  const result = await getConfigUseCase(userId);
 
-    return c.json({ status: 'success', data: result });
-  } catch (e: any) {
-    return c.json({ status: 'error', message: e.message }, 500);
+  if (!result.success) {
+    c.status(result.status as any);
   }
+  return c.json(result);
 };
