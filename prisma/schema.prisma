@@ -211,11 +211,23 @@ model AISuggestion {
 
 model WaBotConfig {
   id          String   @id @default(uuid())
-  userId      String   @unique
-  baseUrl     String
-  adminSecret String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  
+  // Field di code: userId, Kolom di DB: user_id
+  userId      String   @unique @map("user_id")
+  
+  // Field di code: baseUrl, Kolom di DB: base_url
+  baseUrl     String   @map("base_url")
+  
+  // Field di code: adminSecret, Kolom di DB: admin_secret
+  adminSecret String?  @map("admin_secret")
+  
+  // Mapping timestamp juga penting
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  @@map("wa_bot_configs")
+  // Relasi ke User (Pastikan model User Anda ada di schema ini juga)
+  // Jika relasi ini error, Anda bisa menonaktifkannya dulu dengan menghapus baris di bawah ini
+  // user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wa_bot_configs") // Nama tabel di DB
 }
