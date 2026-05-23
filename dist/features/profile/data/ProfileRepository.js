@@ -1,3 +1,4 @@
+// src\features\profile\data\ProfileRepository.ts
 import { prisma } from '../../../infrastructure/database/prisma.js';
 import { generateInviteCode } from '../../../utils/stringUtils.js';
 export const profileRepository = {
@@ -34,12 +35,13 @@ export const profileRepository = {
      * Update data User dan UserProfile dalam satu operasi.
      */
     async updateProfileByUserId(userId, data) {
-        const { name, ...profileData } = data;
+        const { name, phone_number, ...profileData } = data;
         // Gunakan nested write untuk update User dan UserProfile sekaligus
         const updatedUser = await prisma.user.update({
             where: { id: userId },
             data: {
                 name: name, // Update 'name' di model User
+                phone_number: phone_number,
                 profile: {
                     // 'upsert' akan create jika tidak ada, atau update jika ada
                     upsert: {

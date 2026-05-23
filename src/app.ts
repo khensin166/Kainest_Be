@@ -1,6 +1,6 @@
 // app.ts
 import { Hono } from 'hono'
-import { authRoute } from './features/auth/presentation/authRoute.js'
+import { auth } from './infrastructure/auth.js'
 import { profileRoute } from './features/profile/presentation/profileRoute.js'
 import { coupleRoute } from './features/couple/presentation/coupleRoute.js'
 import { todoRoute } from './features/todos/presentation/todoRoute.js'
@@ -13,10 +13,13 @@ import { cors } from 'hono/cors'
 const app = new Hono()
 
 // Hanya izinkan request dari frontend Vue Anda (default Vite)
-// 2. Gunakan middleware CORS (Izinkan semua)
-app.use('*', cors())
+// Gunakan CORS dengan credentials untuk session cookie
+app.use('*', cors({
+  origin: ['https://kainest.kenantomfie.site', 'http://localhost:5173'],
+  credentials: true,
+}))
 
-app.route('/auth', authRoute)
+app.on(["POST", "GET"], "/auth/*", (c) => auth.handler(c.req.raw))
 app.route('/profile', profileRoute)
 app.route('/couple', coupleRoute)
 app.route('/todos', todoRoute)

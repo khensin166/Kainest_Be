@@ -1,10 +1,13 @@
+
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["kainest"]
 }
 
 model Couple {
@@ -17,6 +20,7 @@ model Couple {
   notes     Note[]   @relation("CoupleNotes")
   photos    Photo[]
   todos     Todo[]   @relation("CoupleTodos")
+  @@schema("kainest")
 }
 
 model Photo {
@@ -28,6 +32,7 @@ model Photo {
   createdAt  DateTime @default(now())
   couple     Couple?  @relation(fields: [coupleId], references: [id])
   uploader   User     @relation(fields: [uploadedBy], references: [id])
+  @@schema("kainest")
 }
 
 model UserProfile {
@@ -38,6 +43,7 @@ model UserProfile {
   createdAt      DateTime @default(now())
   userId         String   @unique
   user           User     @relation(fields: [userId], references: [id])
+  @@schema("kainest")
 }
 
 model User {
@@ -66,6 +72,11 @@ model User {
   budgets          Budget[] // Limit budget bulanan
   transactions     Transaction[] // Catatan pengeluaran
   aiSuggestions    AISuggestion[] // Log saran AI
+  emailVerified    Boolean          @default(false)
+  image            String?
+  sessions         Session[]
+  accounts         Account[]
+  @@schema("kainest")
 }
 
 model UserShift {
@@ -77,6 +88,7 @@ model UserShift {
   user       User     @relation(fields: [userId], references: [id])
 
   @@unique([userId, date])
+  @@schema("kainest")
 }
 
 model ShiftActivity {
@@ -89,6 +101,7 @@ model ShiftActivity {
   logs          NotificationLog[]
 
   @@unique([shift_type, reminder_time])
+  @@schema("kainest")
 }
 
 model NotificationLog {
@@ -100,6 +113,7 @@ model NotificationLog {
   user       User          @relation(fields: [userId], references: [id])
 
   @@unique([userId, activityId, sent_at])
+  @@schema("kainest")
 }
 
 model Todo {
@@ -113,6 +127,7 @@ model Todo {
   updatedAt    DateTime @updatedAt
   couple       Couple   @relation("CoupleTodos", fields: [coupleId], references: [id], onDelete: Cascade)
   createdBy    User     @relation("UserTodos", fields: [createdById], references: [id], onDelete: Cascade)
+  @@schema("kainest")
 }
 
 model Note {
@@ -127,11 +142,13 @@ model Note {
   partnerPermission NotePermission @default(VIEWER)
   author            User           @relation("UserNotes", fields: [authorId], references: [id], onDelete: Cascade)
   couple            Couple?        @relation("CoupleNotes", fields: [coupleId], references: [id])
+  @@schema("kainest")
 }
 
 enum NotePermission {
   VIEWER
   EDITOR
+  @@schema("kainest")
 }
 
 // ==========================================
@@ -141,9 +158,11 @@ enum NotePermission {
 enum TransactionType {
   INCOME
   EXPENSE
+  @@schema("kainest")
 }
 
 // 1. Kategori (Dinamis: Bisa default sistem, bisa custom user)
+
 model BudgetCategory {
   id        String          @id @default(uuid())
   name      String // Contoh: "Makan", "Transport", "Kost"
@@ -157,9 +176,11 @@ model BudgetCategory {
 
   budgets      Budget[]
   transactions Transaction[]
+  @@schema("kainest")
 }
 
 // 2. Budget Bulanan (Limit per kategori)
+
 model Budget {
   id           String   @id @default(uuid())
   amount_limit Int // Batas budget (misal: 1.500.000)
@@ -177,10 +198,13 @@ model Budget {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([userId, categoryId, period]) // 1 Kategori hanya punya 1 budget per bulan
+  // 1 Kategori hanya punya 1 budget per bulan
+  @@unique([userId, categoryId, period])
+  @@schema("kainest")
 }
 
 // 3. Transaksi Harian
+
 model Transaction {
   id     String   @id @default(uuid())
   amount Int
@@ -194,9 +218,11 @@ model Transaction {
   category   BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+  @@schema("kainest")
 }
 
 // 4. AI Suggestion Logs (Menyimpan saran Groq)
+
 model AISuggestion {
   id              String  @id @default(uuid())
   type            String // 'DAILY_ADVISOR' | 'MONTHLY_EVAL' | 'REBALANCE'
@@ -207,20 +233,17 @@ model AISuggestion {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+  @@schema("kainest")
 }
 
 model WaBotConfig {
   id          String   @id @default(uuid())
-  
   // Field di code: userId, Kolom di DB: user_id
   userId      String   @unique @map("user_id")
-  
   // Field di code: baseUrl, Kolom di DB: base_url
   baseUrl     String   @map("base_url")
-  
   // Field di code: adminSecret, Kolom di DB: admin_secret
   adminSecret String?  @map("admin_secret")
-  
   // Mapping timestamp juga penting
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -229,5 +252,55 @@ model WaBotConfig {
   // Jika relasi ini error, Anda bisa menonaktifkannya dulu dengan menghapus baris di bawah ini
   // user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("wa_bot_configs") // Nama tabel di DB
+  // Nama tabel di DB
+  @@map("wa_bot_configs")
+  @@schema("kainest")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@schema("kainest")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@schema("kainest")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@schema("kainest")
 }

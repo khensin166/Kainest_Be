@@ -1,6 +1,6 @@
-// Impor klien prisma, bukan supabase
-import { prisma } from '../../../infrastructure/database/prisma.js';
-import { generateInviteCode } from '../../../utils/stringUtils.js';
+// UserRepository.ts
+import { prisma } from "../../../infrastructure/database/prisma.js";
+import { generateInviteCode } from "../../../utils/stringUtils.js";
 export const userRepository = {
     async findByEmail(email) {
         try {
@@ -14,25 +14,25 @@ export const userRepository = {
             return null;
         }
     },
-    // GANTI FUNGSI 'CREATE' ANDA DENGAN INI
-    async create(userData) {
+    async create(data) {
         try {
-            // Buat kode undangan unik
             const inviteCode = generateInviteCode();
             const user = await prisma.user.create({
                 data: {
-                    ...userData, // Ini akan menyertakan email & password
-                    // Secara otomatis buat UserProfile yang terhubung
+                    // Data untuk model 'User'
+                    email: data.email,
+                    password: data.password,
+                    name: data.name,
                     profile: {
                         create: {
                             invitationCode: inviteCode,
-                        }
-                    }
+                            displayName: data.name,
+                        },
+                    },
                 },
-                // Kembalikan user beserta profil yang baru dibuat
                 include: {
-                    profile: true
-                }
+                    profile: true, // Kembalikan data lengkap
+                },
             });
             return user;
         }
@@ -52,9 +52,9 @@ export const userRepository = {
                     email: true,
                     name: true,
                     createdAt: true,
-                    updatedAt: true
+                    updatedAt: true,
                     // Tambahkan field lain jika perlu (misal: avatarUrl)
-                }
+                },
             });
             return user; // Akan null jika tidak ditemukan
         }
@@ -62,5 +62,37 @@ export const userRepository = {
             console.error(error);
             return null;
         }
-    }
+    },
+    /**
+     * Mengambil data user lengkap, termasuk password hash
+     */
+    async findUserWithPassword(id) {
+        try {
+            // findUnique TANPA 'select' akan mengambil semua kolom
+            const user = await prisma.user.findUnique({
+                where: { id },
+            });
+            return user; // Mengembalikan user { id, email, password, ... }
+        }
+        catch (error) {
+            console.error(error);
+            return null;
+        }
+    },
+    /**
+     * Meng-update password user di database
+     */
+    async updatePassword(id, newPasswordHash) {
+        try {
+            await prisma.user.update({
+                where: { id: id },
+                data: { password: newPasswordHash },
+            });
+            return true;
+        }
+        catch (error) {
+            console.error(error);
+            throw error;
+        }
+    },
 };
