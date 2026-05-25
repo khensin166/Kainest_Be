@@ -5,6 +5,12 @@ import { prisma } from "./database/prisma.js";
 const isProdOrStaging = process.env.NODE_ENV === 'production' || process.env.BETTER_AUTH_URL?.includes('kenantomfie.site');
 
 export const auth = betterAuth({
+  trustedOrigins: [
+    "http://localhost:5173", 
+    "https://staging-kainest.kenantomfie.site", 
+    "https://kainest.kenantomfie.site",
+    "https://staging.kainest.be.kenantomfie.site"
+  ],
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
