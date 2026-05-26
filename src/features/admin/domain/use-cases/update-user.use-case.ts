@@ -1,6 +1,4 @@
-import { left, right, Result } from "../../../core/utils/either.js";
-import { Failure, ServerFailure, BadRequestFailure } from "../../../core/error/failures.js";
-import { AdminRepository } from "../data/admin.repository.js";
+import { AdminRepository } from "../../data/admin.repository.js";
 
 interface UpdateUserAccessParams {
   userId: string;
@@ -12,10 +10,10 @@ interface UpdateUserAccessParams {
 export class UpdateUserAccessUseCase {
   constructor(private repository: AdminRepository) {}
 
-  async execute(params: UpdateUserAccessParams): Promise<Result<Failure, any>> {
+  async execute(params: UpdateUserAccessParams) {
     try {
       if (!params.userId) {
-        return left(new BadRequestFailure("User ID is required"));
+        return { success: false, message: "User ID is required", status: 400 };
       }
 
       const updatedUser = await this.repository.updateUserAccess(params.userId, {
@@ -24,10 +22,10 @@ export class UpdateUserAccessUseCase {
         permissions: params.permissions,
       });
 
-      return right(updatedUser);
+      return { success: true, data: updatedUser };
     } catch (error: any) {
       console.error("[UpdateUserAccessUseCase Error]", error);
-      return left(new ServerFailure(error.message || "Failed to update user access"));
+      return { success: false, message: error.message || "Failed to update user access", status: 500 };
     }
   }
 }

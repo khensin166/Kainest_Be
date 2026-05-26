@@ -10,10 +10,10 @@ export class AdminController {
 
   async getUsers(c: Context) {
     const result = await this.getUsersUseCase.execute();
-    return result.fold(
-      (failure) => c.json({ success: false, message: failure.message }, 500),
-      (users) => c.json({ success: true, data: users }, 200)
-    );
+    if (!result.success) {
+      return c.json({ success: false, message: result.message }, 500);
+    }
+    return c.json(result, 200);
   }
 
   async updateUserAccess(c: Context) {
@@ -27,9 +27,9 @@ export class AdminController {
       permissions: body.permissions,
     });
 
-    return result.fold(
-      (failure) => c.json({ success: false, message: failure.message }, 400),
-      (user) => c.json({ success: true, data: user }, 200)
-    );
+    if (!result.success) {
+      return c.json({ success: false, message: result.message }, (result as any).status || 400);
+    }
+    return c.json(result, 200);
   }
 }
