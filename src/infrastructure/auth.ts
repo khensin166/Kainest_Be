@@ -2,7 +2,6 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "./database/prisma.js";
 
-const isProdOrStaging = process.env.NODE_ENV === 'production' || process.env.BETTER_AUTH_URL?.includes('kenantomfie.site');
 
 export const auth = betterAuth({
   trustedOrigins: [
@@ -34,7 +33,9 @@ export const auth = betterAuth({
       clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
     },
   },
-  cookie: {
-    domain: isProdOrStaging ? ".kenantomfie.site" : undefined,
-  }
+  advanced: {
+    crossSubDomainCookies: {
+      enabled: true,
+    },
+  },
 });
