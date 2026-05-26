@@ -7,7 +7,7 @@ const isProdOrStaging = process.env.NODE_ENV === 'production' || process.env.BET
 export const auth = betterAuth({
   trustedOrigins: [
     "http://localhost:5173", 
-    "https://staging-kainest.kenantomfie.site", 
+    "https://staging.kainest.kenantomfie.site", 
     "https://kainest.kenantomfie.site",
     "https://staging.kainest.be.kenantomfie.site"
   ],
