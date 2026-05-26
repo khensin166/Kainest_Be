@@ -8,6 +8,7 @@ import { noteRoute } from './features/notes/presentation/noteRoute.js'
 import { budgetRoute } from "./features/budgeting/presentation/budgetRoute.js";
 import { wabotRoute } from "./features/wabot/presentation/wabotRoutes.js";
 import { uploadRoute } from "./features/upload/presentation/uploadRoute.js";
+import adminRoute from "./features/admin/presentation/admin.route.js";
 import { cors } from 'hono/cors'
 
 const app = new Hono()
@@ -27,6 +28,7 @@ app.route('/notes', noteRoute)
 app.route("/budget", budgetRoute)
 app.route("/wabot", wabotRoute)
 app.route("/upload", uploadRoute)
+app.route("/admin", adminRoute)
 
 app.get('/', (c) => c.text('Hello from Kainest Backend! 🚀'))
 

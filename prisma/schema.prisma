@@ -1,13 +1,13 @@
-
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  schemas  = ["kainest"]
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  schemas   = ["kainest"]
 }
 
 model Couple {
@@ -76,6 +76,14 @@ model User {
   image            String?
   sessions         Session[]
   accounts         Account[]
+
+  // --- NEW: ROLE & PERMISSIONS (Better Auth Admin Plugin) ---
+  role        String?  @default("user")
+  banned      Boolean? @default(false)
+  banReason   String?
+  banExpires  DateTime?
+  permissions String[] @default([]) // Array of allowed modules (e.g. ["budgeting", "notes", "todos", "wabot"])
+
   @@schema("kainest")
 }
 
