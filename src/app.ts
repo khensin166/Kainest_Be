@@ -15,7 +15,7 @@ const app = new Hono()
 // Hanya izinkan request dari frontend Vue Anda (default Vite)
 // Gunakan CORS dengan credentials untuk session cookie
 app.use('*', cors({
-  origin: ['https://kainest.kenantomfie.site', 'http://localhost:5173'],
+  origin: ['https://kainest.kenantomfie.site', 'http://localhost:5173', 'https://staging.kainest.kenantomfie.site'],
   credentials: true,
 }))
 
