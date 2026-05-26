@@ -37,5 +37,10 @@ export const auth = betterAuth({
     crossSubDomainCookies: {
       enabled: true,
     },
+    defaultCookieAttributes: {
+      sameSite: "none",
+      secure: true,
+      domain: ".kenantomfie.site"
+    }
   },
 });
