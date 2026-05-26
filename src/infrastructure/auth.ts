@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "./database/prisma.js";
 
+const isLocal = !process.env.BETTER_AUTH_URL || process.env.BETTER_AUTH_URL.includes("localhost");
 
 export const auth = betterAuth({
   trustedOrigins: [
@@ -35,12 +36,13 @@ export const auth = betterAuth({
   },
   advanced: {
     crossSubDomainCookies: {
-      enabled: true,
+      enabled: !isLocal,
+      domain: isLocal ? undefined : "kenantomfie.site",
     },
     defaultCookieAttributes: {
-      sameSite: "none",
-      secure: true,
-      domain: ".kenantomfie.site"
+      sameSite: isLocal ? "lax" : "none",
+      secure: !isLocal,
+      domain: isLocal ? undefined : "kenantomfie.site"
     }
   },
 });
