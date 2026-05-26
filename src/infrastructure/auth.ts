@@ -42,7 +42,7 @@ export const auth = betterAuth({
     defaultCookieAttributes: {
       sameSite: isLocal ? "lax" : "none",
       secure: !isLocal,
-      domain: isLocal ? undefined : "kenantomfie.site"
+      domain: isLocal ? undefined : ".kenantomfie.site"
     }
   },
 });
