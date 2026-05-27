@@ -70,6 +70,7 @@ model User {
   // Relasi ke fitur Budgeting
   budgetCategories BudgetCategory[] // Kategori custom user
   budgets          Budget[] // Limit budget bulanan
+  pockets          BudgetPocket[] // Template Kantong User
   transactions     Transaction[] // Catatan pengeluaran
   aiSuggestions    AISuggestion[] // Log saran AI
   emailVerified    Boolean          @default(false)
@@ -179,16 +180,19 @@ model BudgetCategory {
   isDefault Boolean         @default(false) // True jika bawaan sistem
   createdAt DateTime        @default(now())
 
+  // TAMBAHAN BARU UNTUK LLM
+  keywords  String[]        @default([]) // Contoh: ["makan", "minum", "gofood"]
+
   userId String? // Nullable. Jika null = Kategori Global (semua user punya)
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   budgets      Budget[]
   transactions Transaction[]
+  pockets      BudgetPocket[] // Relasi ke BudgetPocket
   @@schema("kainest")
 }
 
-// 2. Budget Bulanan (Limit per kategori)
-
+// 2. Budget Bulanan (Limit per kategori di bulan tertentu)
 model Budget {
   id           String   @id @default(uuid())
   amount_limit Int // Batas budget (misal: 1.500.000)
@@ -208,6 +212,26 @@ model Budget {
 
   // 1 Kategori hanya punya 1 budget per bulan
   @@unique([userId, categoryId, period])
+  @@schema("kainest")
+}
+
+// 2.5 Kantong Budget (Template Limit/Persentase Permanen User)
+model BudgetPocket {
+  id          String   @id @default(uuid())
+  userId      String
+  categoryId  String
+  
+  percentage  Float?   // Persentase alokasi dari total gaji (misal: 15)
+  limitAmount Float?   // Atau nominal pasti jika tidak ingin persen (misal: 500000)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category    BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 1 user hanya punya 1 pocket per kategori
+  @@unique([userId, categoryId]) 
   @@schema("kainest")
 }
 

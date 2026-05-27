@@ -11,6 +11,12 @@ import { getTransactionsUseCase } from "../domain/use-cases/GetTransactionsUseCa
 import { getTransactionDetailUseCase } from "../domain/use-cases/GetTransactionDetailUseCase.js";
 import { updateTransactionUseCase } from "../domain/use-cases/UpdateTransactionUseCase.js";
 import { deleteTransactionUseCase } from "../domain/use-cases/DeleteTransactionUseCase.js";
+import { getPocketsUseCase } from "../domain/use-cases/GetPocketsUseCase.js";
+import { upsertPocketUseCase } from "../domain/use-cases/UpsertPocketUseCase.js";
+import { deletePocketUseCase } from "../domain/use-cases/DeletePocketUseCase.js";
+import { bulkSetupPocketsUseCase } from "../domain/use-cases/BulkSetupPocketsUseCase.js";
+import { updateCategoryKeywordsUseCase } from "../domain/use-cases/UpdateCategoryKeywordsUseCase.js";
+import { classifyTransactionUseCase } from "../domain/use-cases/ClassifyTransactionUseCase.js";
 // === Create Transaction ===
 export const createTransactionController = async (c: Context) => {
   const userId = c.get("userId"); // Dari authMiddleware
@@ -167,5 +173,85 @@ export const deleteTransactionController = async (c: Context) => {
   const result = await deleteTransactionUseCase(transactionId, userId);
 
   if (!result.success) c.status(result.status as any);
+  return c.json(result);
+};
+
+// ==========================================
+// 💰 POCKET (KANTONG) CONTROLLERS
+// ==========================================
+
+// === GET: Ambil semua kantong user ===
+export const getPocketsController = async (c: Context) => {
+  const userId = c.get("userId");
+  const result = await getPocketsUseCase(userId);
+
+  if (!result.success) c.status(result.status as any);
+  return c.json(result);
+};
+
+// === PUT: Buat/update satu kantong ===
+export const upsertPocketController = async (c: Context) => {
+  const userId = c.get("userId");
+  const body = await c.req.json();
+
+  const result = await upsertPocketUseCase({
+    userId,
+    categoryId: body.categoryId,
+    percentage: body.percentage,
+    limitAmount: body.limitAmount,
+  });
+
+  if (!result.success) c.status(result.status as any);
+  return c.json(result);
+};
+
+// === DELETE: Hapus kantong ===
+export const deletePocketController = async (c: Context) => {
+  const userId = c.get("userId");
+  const categoryId = c.req.param("categoryId");
+
+  const result = await deletePocketUseCase(userId, categoryId);
+
+  if (!result.success) c.status(result.status as any);
+  return c.json(result);
+};
+
+// === POST: Bulk setup kantong (untuk onboarding) ===
+export const bulkSetupPocketsController = async (c: Context) => {
+  const userId = c.get("userId");
+  const body = await c.req.json();
+
+  const result = await bulkSetupPocketsUseCase({
+    userId,
+    pockets: body.pockets,
+  });
+
+  if (!result.success) c.status(result.status as any);
+  return c.json(result);
+};
+
+// === PATCH: Update keywords kategori ===
+export const updateKeywordsController = async (c: Context) => {
+  const categoryId = c.req.param("categoryId");
+  const body = await c.req.json();
+
+  const result = await updateCategoryKeywordsUseCase(categoryId, body.keywords);
+
+  if (!result.success) c.status(result.status as any);
+  return c.json(result);
+};
+
+// === POST: Klasifikasi teks pengeluaran via AI ===
+export const classifyTransactionController = async (c: Context) => {
+  const userId = c.get("userId");
+  const body = await c.req.json();
+
+  if (!body.text) {
+    return c.json({ success: false, message: "Teks pengeluaran wajib diisi." }, 400);
+  }
+
+  const result = await classifyTransactionUseCase(userId, body.text);
+
+  if (!result.success) c.status(500);
   return c.json(result);
 };

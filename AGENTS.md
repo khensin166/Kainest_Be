@@ -45,3 +45,9 @@ We use **Better Auth** with cookie-based sessions that are shared across subdoma
 - **Implementation**: We use the Better Auth `admin()` plugin which manages `role`, `banned`, `banReason`, and `banExpires` fields natively. We also added a custom `permissions` array (String[]) to the Prisma `User` schema for granular module access.
 - **Protection**: Use the `requireAdmin` middleware (`src/core/middlewares/role.middleware.ts`) to protect endpoints that should only be accessible by administrators.
 - **Architecture**: The Admin functionality (getting users, updating access/roles) is encapsulated within `features/admin/` following Clean Architecture principles.
+
+## 🔄 Recent Updates
+- **RBAC Schema & Endpoints**: Added `role` and `permissions` (String[]) to the Prisma `User` schema. Built the Admin API (`GET /admin/users`, `PATCH /admin/users/:id/access`) to manage these properties securely.
+- **Better Auth Syncing**: Discovered and resolved discrepancies between custom endpoints and native Better Auth endpoints (utilizing native `/auth/sign-in/email`, `/auth/sign-up/email`, and `/auth/sign-out` routes).
+- **Secure Cloudinary Integration**: Added `getUploadSignatureController` to generate secure timestamps and signatures for frontend-direct image uploading without passing images through the Node.js server.
+- **Vercel Serverless Optimization**: Emphasized the necessity of aligning Vercel Function Regions with Supabase Regions (e.g., Singapore `sin1`) to minimize cross-continental latency bottlenecks. Also highlighted environment variable syncing for Vercel deployments.
