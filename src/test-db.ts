@@ -8,6 +8,7 @@ async function main() {
   console.log('Users:', users);
 }
 
+// Main 
 main()
   .catch((e) => console.error(e))
   .finally(async () => await prisma.$disconnect());
