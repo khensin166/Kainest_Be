@@ -3,11 +3,19 @@ import { auth } from '../../../infrastructure/auth.js'
 
 export const authMiddleware = async (c: Context, next: Next) => {
   try {
-    // Tambahkan debug logging untuk memeriksa ketersediaan header cookie di production/staging
+    // Debug logging untuk memeriksa ketersediaan auth di production/staging
     if (process.env.NODE_ENV === "production") {
       const cookieHeader = c.req.raw.headers.get("cookie");
-      if (!cookieHeader || !cookieHeader.includes("better-auth.session_token")) {
-        console.warn("[AuthMiddleware] Peringatan: Cookie sesi tidak ditemukan dalam header request.");
+      const authHeader = c.req.raw.headers.get("authorization");
+      const hasCookie = cookieHeader && (
+        cookieHeader.includes("better-auth.session_token") ||
+        cookieHeader.includes("__Secure-better-auth.session_token")
+      );
+      const hasBearer = !!authHeader && authHeader.startsWith("Bearer ");
+      if (!hasCookie && !hasBearer) {
+        console.warn("[AuthMiddleware] Peringatan: Cookie sesi DAN Bearer token tidak ditemukan dalam header request.");
+      } else {
+        console.log(`[AuthMiddleware] Auth found via: ${hasBearer ? 'Bearer token' : 'Cookie'}`);
       }
     }
 
