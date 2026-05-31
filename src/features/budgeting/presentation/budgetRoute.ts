@@ -4,6 +4,7 @@ import {
   createTransactionController,
   getBudgetStatusController,
   getCategoriesController,
+  createCustomCategoryController,
   setupBudgetController,
   getSummaryController,
   getAiAdviceController,
@@ -30,6 +31,9 @@ budgetRoute.use("*", authMiddleware);
 
 // 1. Ambil daftar kategori (untuk dropdown)
 budgetRoute.get("/categories", getCategoriesController);
+
+// Buat kategori kustom user
+budgetRoute.post("/categories", createCustomCategoryController);
 
 // 2. Input Transaksi Baru
 budgetRoute.post("/transactions", createTransactionController);

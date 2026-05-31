@@ -31,11 +31,38 @@ export const budgetRepository = {
   },
 
   /**
-   * Ambil semua kategori (untuk dropdown saat input transaksi)
+   * Ambil semua kategori (Global + Custom milik User)
    */
-  async findAllCategories() {
+  async findAllCategories(userId?: string) {
     return prisma.budgetCategory.findMany({
+      where: userId ? {
+        OR: [
+          { isDefault: true },
+          { userId: null },
+          { userId: userId }
+        ]
+      } : {
+        OR: [
+          { isDefault: true },
+          { userId: null }
+        ]
+      },
       orderBy: { name: "asc" },
+    });
+  },
+
+  /**
+   * Membuat kategori kustom milik user
+   */
+  async createCustomCategory(userId: string, name: string, icon: string) {
+    return prisma.budgetCategory.create({
+      data: {
+        name,
+        icon,
+        type: "EXPENSE",
+        isDefault: false,
+        userId: userId,
+      }
     });
   },
 

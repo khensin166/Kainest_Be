@@ -42,7 +42,7 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
       console.log(`🔄 [LAZY LOAD] Membuat history baru untuk bulan ${startDate.toISOString()}`);
       
       const pockets = await pocketRepository.findPocketsByUser(userId);
-      const categories = await budgetRepository.findAllCategories();
+      const categories = await budgetRepository.findAllCategories(userId);
       
       let totalBudgeted = 0;
       let totalSaved = 0;

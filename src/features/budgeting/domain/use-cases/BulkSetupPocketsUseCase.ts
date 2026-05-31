@@ -60,7 +60,7 @@ export const bulkSetupPocketsUseCase = async (data: BulkSetupData) => {
     const results = await pocketRepository.bulkUpsertPockets(userId, pockets);
 
     // Ambil detail kategori untuk nama & icon di snapshot
-    const categories = await budgetRepository.findAllCategories();
+    const categories = await budgetRepository.findAllCategories(userId);
 
     // Sinkronisasi limit ke Monthly Financial History (untuk bulan berjalan)
     const now = new Date();
