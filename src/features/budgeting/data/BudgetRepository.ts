@@ -70,6 +70,22 @@ export const budgetRepository = {
   },
 
   /**
+   * Menghapus budget untuk bulan tertentu yang kategorinya TIDAK ada dalam daftar.
+   * Ini digunakan untuk sinkronisasi dengan Kantong (Pocket) agar data budget yang stale terhapus.
+   */
+  async deleteBudgetsNotInCategories(userId: string, period: Date, keepCategoryIds: string[]) {
+    return prisma.budget.deleteMany({
+      where: {
+        userId: userId,
+        period: period,
+        categoryId: {
+          notIn: keepCategoryIds
+        }
+      }
+    });
+  },
+
+  /**
    * Ambil semua budget user di bulan tertentu
    * + Include kategori untuk nama & icon
    */

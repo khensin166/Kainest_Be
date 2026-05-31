@@ -52,6 +52,10 @@ export const bulkSetupPocketsUseCase = async (data) => {
             return budgetRepository.upsertBudget(userId, p.categoryId, period, amountLimit, false);
         });
         await Promise.all(budgetPromises);
+        // Hapus data budget (bulanan) yang usang/stale (seperti default Makan, Kos, Transport) 
+        // jika user tidak memasukkannya ke dalam Pocket yang baru diset.
+        const keepCategoryIds = pockets.map(p => p.categoryId);
+        await budgetRepository.deleteBudgetsNotInCategories(userId, period, keepCategoryIds);
         return {
             success: true,
             message: `${results.length} kantong berhasil disimpan.`,
