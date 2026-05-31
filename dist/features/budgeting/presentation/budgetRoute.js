@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../../auth/presentation/authMiddleware.js";
-import { createTransactionController, getBudgetStatusController, getCategoriesController, setupBudgetController, getSummaryController, getAiAdviceController, seedCategoriesController, evaluateBudgetController, getTrendController, getTransactionsController, getTransactionDetailController, updateTransactionController, deleteTransactionController, } from "../services/budgetController.js";
+import { createTransactionController, getBudgetStatusController, getCategoriesController, setupBudgetController, getSummaryController, getAiAdviceController, seedCategoriesController, evaluateBudgetController, getTrendController, getTransactionsController, getTransactionDetailController, updateTransactionController, deleteTransactionController, 
+// Pocket Controllers
+getPocketsController, upsertPocketController, deletePocketController, bulkSetupPocketsController, updateKeywordsController, classifyTransactionController, } from "../services/budgetController.js";
 export const budgetRoute = new Hono();
 // Middleware Auth (Wajib Login)
 budgetRoute.use("*", authMiddleware);
@@ -33,3 +35,18 @@ budgetRoute.post("/seed-categories", seedCategoriesController);
 budgetRoute.post("/evaluate", evaluateBudgetController);
 // Ambil Data Tren Harian (GET) -> Untuk Grafik Dashboard
 budgetRoute.get("/trend", getTrendController);
+// ==========================================
+// 💰 POCKET (KANTONG) ROUTES
+// ==========================================
+// GET: Ambil daftar kantong user
+budgetRoute.get("/pockets", getPocketsController);
+// PUT: Buat atau update satu kantong
+budgetRoute.put("/pockets", upsertPocketController);
+// DELETE: Hapus kantong berdasarkan categoryId
+budgetRoute.delete("/pockets/:categoryId", deletePocketController);
+// POST: Bulk setup kantong (untuk onboarding)
+budgetRoute.post("/pockets/setup", bulkSetupPocketsController);
+// PATCH: Update keywords pada kategori tertentu
+budgetRoute.patch("/categories/:categoryId/keywords", updateKeywordsController);
+// POST: Klasifikasi teks pengeluaran via AI (Grok)
+budgetRoute.post("/classify", classifyTransactionController);

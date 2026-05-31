@@ -1,5 +1,6 @@
 // BulkSetupPocketsUseCase.ts
 import { pocketRepository } from "../../data/PocketRepository.js";
+import { budgetRepository } from "../../data/BudgetRepository.js";
 
 type PocketInput = {
   categoryId: string;
@@ -52,7 +53,25 @@ export const bulkSetupPocketsUseCase = async (data: BulkSetupData) => {
       };
     }
 
+    // Ambil salary user untuk menghitung budget bulanan
+    const user = await budgetRepository.findUserById(userId);
+    const salary = user?.salary || 0;
+
     const results = await pocketRepository.bulkUpsertPockets(userId, pockets);
+
+    // Sinkronisasi limit ke Budget bulanan (untuk bulan berjalan)
+    const now = new Date();
+    const period = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+    const budgetPromises = pockets.map((p) => {
+      let amountLimit = p.limitAmount || 0;
+      if (p.percentage != null) {
+        amountLimit = Math.floor((p.percentage / 100) * salary);
+      }
+      return budgetRepository.upsertBudget(userId, p.categoryId, period, amountLimit, false);
+    });
+
+    await Promise.all(budgetPromises);
 
     return {
       success: true,

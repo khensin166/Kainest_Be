@@ -52,9 +52,13 @@ export const getMonthlySummaryUseCase = async (userId) => {
         // 5. Hitung Total Keseluruhan
         const totalLimit = summary.reduce((acc, curr) => acc + curr.limit, 0);
         const totalSpent = summary.reduce((acc, curr) => acc + curr.spent, 0);
+        // Ambil salary user untuk informasi UI (apakah sudah setup gaji atau belum)
+        const user = await budgetRepository.findUserById(userId);
+        const salary = user?.salary || 0;
         return {
             success: true,
             data: {
+                salary: salary, // Penting untuk cek apakah user sudah input gaji!
                 month: startDate.toLocaleString("default", {
                     month: "long",
                     year: "numeric",

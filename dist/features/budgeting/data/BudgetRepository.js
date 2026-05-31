@@ -17,6 +17,18 @@ export const budgetRepository = {
             },
         });
     },
+    async findUserById(userId) {
+        return prisma.user.findUnique({
+            where: { id: userId },
+            select: { salary: true }
+        });
+    },
+    async updateUserSalary(userId, salary) {
+        return prisma.user.update({
+            where: { id: userId },
+            data: { salary }
+        });
+    },
     /**
      * Ambil semua kategori (untuk dropdown saat input transaksi)
      */

@@ -1,8 +1,8 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { admin } from "better-auth/plugins";
+import { admin, bearer } from "better-auth/plugins";
 import { prisma } from "./database/prisma.js";
-const isLocal = !process.env.BETTER_AUTH_URL || process.env.BETTER_AUTH_URL.includes("localhost");
+const isLocal = process.env.NODE_ENV !== "production" && (!process.env.BETTER_AUTH_URL || process.env.BETTER_AUTH_URL.includes("localhost"));
 export const auth = betterAuth({
     trustedOrigins: [
         "http://localhost:5173",
@@ -33,7 +33,7 @@ export const auth = betterAuth({
             clientSecret: process.env.GITHUB_CLIENT_SECRET,
         },
     },
-    plugins: [admin()],
+    plugins: [admin(), bearer()],
     advanced: {
         crossSubDomainCookies: {
             enabled: !isLocal,
@@ -41,8 +41,7 @@ export const auth = betterAuth({
         },
         defaultCookieAttributes: {
             sameSite: isLocal ? "lax" : "none",
-            secure: !isLocal,
-            domain: isLocal ? undefined : ".kenantomfie.site"
+            secure: !isLocal
         }
     },
 });
