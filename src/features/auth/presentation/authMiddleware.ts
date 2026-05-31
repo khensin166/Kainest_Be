@@ -3,6 +3,14 @@ import { auth } from '../../../infrastructure/auth.js'
 
 export const authMiddleware = async (c: Context, next: Next) => {
   try {
+    // Tambahkan debug logging untuk memeriksa ketersediaan header cookie di production/staging
+    if (process.env.NODE_ENV === "production") {
+      const cookieHeader = c.req.raw.headers.get("cookie");
+      if (!cookieHeader || !cookieHeader.includes("better-auth.session_token")) {
+        console.warn("[AuthMiddleware] Peringatan: Cookie sesi tidak ditemukan dalam header request.");
+      }
+    }
+
     const session = await auth.api.getSession({
       headers: c.req.raw.headers,
     });
