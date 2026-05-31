@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../../auth/presentation/authMiddleware.js";
-import { createTransactionController, getBudgetStatusController, getCategoriesController, setupBudgetController, getSummaryController, getAiAdviceController, seedCategoriesController, evaluateBudgetController, getTrendController, getTransactionsController, getTransactionDetailController, updateTransactionController, deleteTransactionController, 
+import { createTransactionController, getBudgetStatusController, getCategoriesController, createCustomCategoryController, setupBudgetController, getSummaryController, getAiAdviceController, seedCategoriesController, evaluateBudgetController, getTrendController, getTransactionsController, getTransactionDetailController, updateTransactionController, deleteTransactionController, 
 // Pocket Controllers
 getPocketsController, upsertPocketController, deletePocketController, bulkSetupPocketsController, updateKeywordsController, classifyTransactionController, } from "../services/budgetController.js";
 export const budgetRoute = new Hono();
@@ -8,6 +8,8 @@ export const budgetRoute = new Hono();
 budgetRoute.use("*", authMiddleware);
 // 1. Ambil daftar kategori (untuk dropdown)
 budgetRoute.get("/categories", getCategoriesController);
+// Buat kategori kustom user
+budgetRoute.post("/categories", createCustomCategoryController);
 // 2. Input Transaksi Baru
 budgetRoute.post("/transactions", createTransactionController);
 // BARU: GET /api/budget/transactions (Read List)

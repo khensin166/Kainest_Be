@@ -44,8 +44,25 @@ export const getBudgetStatusController = async (c) => {
 };
 // === Helper: Get Categories (Dropdown) ===
 export const getCategoriesController = async (c) => {
-    const categories = await budgetRepository.findAllCategories();
+    const userId = c.get("userId");
+    const categories = await budgetRepository.findAllCategories(userId);
     return c.json({ success: true, data: categories });
+};
+// === POST: Buat Kategori Kustom ===
+export const createCustomCategoryController = async (c) => {
+    const userId = c.get("userId");
+    const body = await c.req.json();
+    if (!body.name || !body.icon) {
+        return c.json({ success: false, message: "Name and icon are required" }, 400);
+    }
+    try {
+        const category = await budgetRepository.createCustomCategory(userId, body.name, body.icon);
+        return c.json({ success: true, data: category, message: "Kategori berhasil dibuat" });
+    }
+    catch (error) {
+        console.error("Create Custom Category Error:", error);
+        return c.json({ success: false, message: "Gagal membuat kategori" }, 500);
+    }
 };
 // === Setup Budget (Biasanya dipanggil saat Onboarding) ===
 export const setupBudgetController = async (c) => {

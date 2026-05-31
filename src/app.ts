@@ -10,6 +10,7 @@ import { wabotRoute } from "./features/wabot/presentation/wabotRoutes.js";
 import { uploadRoute } from "./features/upload/presentation/uploadRoute.js";
 import adminRoute from "./features/admin/presentation/admin.route.js";
 import { cors } from 'hono/cors'
+import { loggingMiddleware } from './infrastructure/middlewares/LoggingMiddleware.js'
 
 const app = new Hono()
 
@@ -19,6 +20,9 @@ app.use('*', cors({
   origin: ['https://kainest.kenantomfie.site', 'http://localhost:5173', 'https://staging.kainest.kenantomfie.site'],
   credentials: true,
 }))
+
+// 🔵 Global Logging Middleware — Semua request masuk akan tercatat
+app.use('*', loggingMiddleware)
 
 /**
  * Route khusus untuk social login callback (token exchange bridge).

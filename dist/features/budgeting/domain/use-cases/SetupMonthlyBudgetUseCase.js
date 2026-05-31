@@ -12,7 +12,7 @@ export const setupMonthlyBudgetUseCase = async (data) => {
         let totalSaved = 0;
         // 2. Buat otomatis kantong Tabungan jika ada
         if (savingTargetPercent > 0) {
-            const categories = await budgetRepository.findAllCategories();
+            const categories = await budgetRepository.findAllCategories(userId);
             const tabunganCategory = categories.find((c) => c.name.toLowerCase().includes("tabungan") || c.name.toLowerCase().includes("saving"));
             if (tabunganCategory) {
                 // Simpan sebagai template kantong permanen
