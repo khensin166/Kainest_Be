@@ -9,20 +9,32 @@ export const evaluateMonthlyBudgetUseCase = async (userId) => {
         const now = new Date();
         const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        // 2. Ambil Data Budget & Spending
-        const budgets = await budgetRepository.findBudgetsByMonth(userId, startDate);
+        // 2. Ambil Data History & Spending
+        const history = await budgetRepository.findMonthlyHistory(userId, startDate);
+        let pocketsSnapshot = [];
+        if (history && history.pocketsSnapshot) {
+            if (typeof history.pocketsSnapshot === 'string') {
+                try {
+                    pocketsSnapshot = JSON.parse(history.pocketsSnapshot);
+                }
+                catch (e) { }
+            }
+            else if (Array.isArray(history.pocketsSnapshot)) {
+                pocketsSnapshot = history.pocketsSnapshot;
+            }
+        }
         const expenses = await budgetRepository.getMonthlyExpenseGrouped(userId, startDate, endDate);
         // 🔥 DEBUG 1: Cek Data Mentah dari Database
         console.log("========================================");
         console.log(`🔍 [DEBUG] Periode: ${startDate.toISOString()} s/d ${endDate.toISOString()}`);
-        console.log(`🔍 [DEBUG] Total Budget Ditemukan: ${budgets.length}`);
+        console.log(`🔍 [DEBUG] Total Kategori di History: ${pocketsSnapshot.length}`);
         console.log(`🔍 [DEBUG] Data Pengeluaran (Raw):`, expenses);
         console.log("========================================");
         // 3. 🧠 LEARNING ENGINE (Rule-Based Calculation)
-        const analysis = budgets.map((budget) => {
-            const expense = expenses.find((e) => e.categoryId === budget.categoryId);
+        const analysis = pocketsSnapshot.map((pocket) => {
+            const expense = expenses.find((e) => e.categoryId === pocket.categoryId);
             const spent = expense?._sum.amount || 0;
-            const limit = budget.amount_limit;
+            const limit = pocket.limitAmount || 0;
             let suggestion = limit;
             let action = "KEEP"; // KEEP | INCREASE | DECREASE
             let reason = "Spending sesuai budget.";
@@ -52,13 +64,13 @@ export const evaluateMonthlyBudgetUseCase = async (userId) => {
                     "Budget jebol. Naikkan limit agar bulan depan tidak merah lagi.";
             }
             // 🔥 DEBUG 2: Cek Perhitungan Per Item (Supaya tau kenapa masuk KEEP)
-            console.log(`👉 Cek Kategori: ${budget.category.name}`);
+            console.log(`👉 Cek Kategori: ${pocket.categoryName}`);
             console.log(`   Limit: ${limit} | Spent: ${spent}`);
-            console.log(`   Ratio: ${(spent / limit) * 100}%`);
+            console.log(`   Ratio: ${limit > 0 ? (spent / limit) * 100 : 0}%`);
             console.log(`   Action: ${action} (Reason: ${reason})`);
             console.log("----------------------------------------");
             return {
-                categoryName: budget.category.name,
+                categoryName: pocket.categoryName,
                 currentLimit: limit,
                 actualSpent: spent,
                 suggestedLimit: suggestion,

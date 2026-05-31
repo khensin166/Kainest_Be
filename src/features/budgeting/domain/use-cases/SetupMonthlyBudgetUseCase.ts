@@ -15,26 +15,54 @@ export const setupMonthlyBudgetUseCase = async (data: SetupData) => {
     // 1. Simpan salary ke User
     await budgetRepository.updateUserSalary(userId, salary);
 
+    const now = new Date();
+    const period = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+    let pocketsSnapshot: any[] = [];
+    let totalBudgeted = 0;
+    let totalSaved = 0;
+
     // 2. Buat otomatis kantong Tabungan jika ada
     if (savingTargetPercent > 0) {
       const categories = await budgetRepository.findAllCategories();
-      const idTabungan = categories.find((c) => 
+      const tabunganCategory = categories.find((c) => 
         c.name.toLowerCase().includes("tabungan") || c.name.toLowerCase().includes("saving")
-      )?.id;
+      );
 
-      if (idTabungan) {
+      if (tabunganCategory) {
         // Simpan sebagai template kantong permanen
-        await pocketRepository.upsertPocket(userId, idTabungan, {
+        await pocketRepository.upsertPocket(userId, tabunganCategory.id, {
           percentage: savingTargetPercent * 100
         });
 
-        // Simpan sebagai budget untuk bulan berjalan
-        const now = new Date();
-        const period = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
         const amountLimit = Math.floor(salary * savingTargetPercent);
-        
-        await budgetRepository.upsertBudget(userId, idTabungan, period, amountLimit, false);
+        totalBudgeted += amountLimit;
+        totalSaved += amountLimit;
+
+        pocketsSnapshot.push({
+          categoryId: tabunganCategory.id,
+          categoryName: tabunganCategory.name,
+          icon: tabunganCategory.icon || "💰",
+          limitAmount: amountLimit
+        });
       }
+    }
+
+    // Ambil histori lama jika ada (untuk tidak mereset totalSpent atau kantong lain jika bukan setup baru)
+    const existingHistory = await budgetRepository.findMonthlyHistory(userId, period);
+    
+    // Jika sudah ada kantong lain di history, biarkan saja (jangan dioverwrite kecuali tabungan)
+    if (existingHistory && Array.isArray(existingHistory.pocketsSnapshot)) {
+        // Abaikan jika ini setup ulang yang kompleks, biarkan BulkSetup yang menangani kompleksitas
+        // Ini hanya untuk initial setup
+    } else {
+        await budgetRepository.upsertMonthlyHistory(userId, period, {
+            salarySnapshot: salary,
+            totalBudgeted: totalBudgeted,
+            totalSaved: totalSaved,
+            pocketsSnapshot: pocketsSnapshot,
+            totalSpent: existingHistory?.totalSpent || 0
+        });
     }
 
     return {

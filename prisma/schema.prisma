@@ -69,7 +69,7 @@ model User {
 
   // Relasi ke fitur Budgeting
   budgetCategories BudgetCategory[] // Kategori custom user
-  budgets          Budget[] // Limit budget bulanan
+  monthlyHistories MonthlyFinancialHistory[] // Raport keuangan bulanan
   pockets          BudgetPocket[] // Template Kantong User
   transactions     Transaction[] // Catatan pengeluaran
   aiSuggestions    AISuggestion[] // Log saran AI
@@ -186,32 +186,36 @@ model BudgetCategory {
   userId String? // Nullable. Jika null = Kategori Global (semua user punya)
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  budgets      Budget[]
   transactions Transaction[]
   pockets      BudgetPocket[] // Relasi ke BudgetPocket
   @@schema("kainest")
 }
 
-// 2. Budget Bulanan (Limit per kategori di bulan tertentu)
-model Budget {
-  id           String   @id @default(uuid())
-  amount_limit Int // Batas budget (misal: 1.500.000)
-  period       DateTime @db.Date // Disimpan per bulan (tgl 1 setiap bulan)
-
-  // Learning Fields
-  is_ai_adjusted Boolean @default(false) // Apakah limit ini hasil saran AI?
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  categoryId String
-  category   BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // 1 Kategori hanya punya 1 budget per bulan
-  @@unique([userId, categoryId, period])
+// 2. Raport Keuangan Bulanan (History)
+model MonthlyFinancialHistory {
+  id              String   @id @default(uuid())
+  userId          String
+  period          DateTime @db.Date // Tanggal 1 setiap bulan (contoh: 2026-05-01)
+  
+  // Snapshots (Fotokopi Gaji & Kondisi di bulan tersebut)
+  salarySnapshot  Int      // Gaji pada bulan ini
+  
+  // Agregasi Totals
+  totalBudgeted   Int      // Total nilai uang yang dialokasikan ke kantong
+  totalSaved      Int      // Total nilai uang yang dialokasikan khusus ke "Tabungan"
+  totalSpent      Int      @default(0) // Total pengeluaran bulan ini
+  
+  // Rincian Kantong (Disimpan sebagai teks JSON)
+  pocketsSnapshot Json     
+  
+  // Ruang untuk AI di masa depan
+  aiEvaluation    String?  @db.Text
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, period]) // Hanya boleh 1 raport per user per bulan
   @@schema("kainest")
 }
 

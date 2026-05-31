@@ -30,23 +30,20 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
       `📅 Periode: ${startDate.toISOString()} s/d ${endDate.toISOString()}`
     );
 
-    // 2. Ambil Semua Budget User Bulan Ini
-    const budgets = await budgetRepository.findBudgetsByMonth(
-      userId,
-      startDate
-    );
+    // 2. Ambil History Bulanan
+    const history = await budgetRepository.findMonthlyHistory(userId, startDate);
 
-    // 🔥 CCTV 2: Cek Hasil Query Budget
-    console.log(`💰 Budget Ditemukan: ${budgets.length} item`);
-    if (budgets.length === 0) {
-      console.warn("⚠️ PERINGATAN: User ini tidak punya budget di bulan ini!");
-      // Cek database manual: SELECT * FROM "Budget" WHERE "userId" = '...'
-    } else {
-      // Print salah satu contoh budget untuk cek tanggalnya
-      console.log(
-        "   Contoh Budget Pertama:",
-        JSON.stringify(budgets[0], null, 2)
-      );
+    let pocketsSnapshot: any[] = [];
+    if (history && history.pocketsSnapshot) {
+        if (typeof history.pocketsSnapshot === 'string') {
+            try {
+                pocketsSnapshot = JSON.parse(history.pocketsSnapshot);
+            } catch (e) {
+                pocketsSnapshot = [];
+            }
+        } else if (Array.isArray(history.pocketsSnapshot)) {
+            pocketsSnapshot = history.pocketsSnapshot;
+        }
     }
 
     // 3. Ambil Realisasi Pengeluaran (Group By Category)
@@ -57,19 +54,20 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
       endDate
     );
 
-    // 4. Gabungkan Data (Merge Budget + Expense)
-    const summary = budgets.map((budget) => {
+    // 4. Gabungkan Data (Merge Snapshot + Expense)
+    const summary = pocketsSnapshot.map((pocket) => {
       // Cari pengeluaran yang cocok dengan kategori ini
-      const expense = expenses.find((e) => e.categoryId === budget.categoryId);
+      const expense = expenses.find((e) => e.categoryId === pocket.categoryId);
       const spent = expense?._sum.amount || 0;
-      const remaining = budget.amount_limit - spent;
-      const percentage = Math.min((spent / budget.amount_limit) * 100, 100);
+      const amountLimit = pocket.limitAmount || 0;
+      const remaining = amountLimit - spent;
+      const percentage = amountLimit > 0 ? Math.min((spent / amountLimit) * 100, 100) : 0;
 
       return {
-        categoryId: budget.categoryId,
-        categoryName: budget.category.name,
-        icon: budget.category.icon,
-        limit: budget.amount_limit,
+        categoryId: pocket.categoryId,
+        categoryName: pocket.categoryName,
+        icon: pocket.icon,
+        limit: amountLimit,
         spent: spent,
         remaining: remaining,
         percentage_used: Math.round(percentage),

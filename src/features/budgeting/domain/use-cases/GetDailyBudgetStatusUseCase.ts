@@ -6,9 +6,13 @@ import { transactionRepository } from "../../data/TransactionRepository.js";
  */
 const getMonthDates = () => {
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const daysInMonth = endOfMonth.getDate();
+  
+  // Gunakan UTC agar seragam dengan GetMonthlySummary
+  const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const endOfMonth = new Date(nextMonthStart.getTime() - 1);
+  
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const currentDay = now.getDate();
   const daysLeft = daysInMonth - currentDay + 1; // +1 biar hari ini dihitung
   
@@ -19,19 +23,35 @@ export const getDailyBudgetStatusUseCase = async (userId: string, categoryId: st
   try {
     const { startOfMonth, endOfMonth, daysInMonth, daysLeft } = getMonthDates();
 
-    // 1. Ambil Limit Budget
-    const budget = await budgetRepository.findBudgetLimit(userId, categoryId, startOfMonth);
+    // 1. Ambil Limit Budget dari History
+    const history = await budgetRepository.findMonthlyHistory(userId, startOfMonth);
+    
+    let limit = 0;
+    let categoryName = "Kategori";
+
+    if (history && history.pocketsSnapshot) {
+      let pockets: any[] = [];
+      if (typeof history.pocketsSnapshot === 'string') {
+        try { pockets = JSON.parse(history.pocketsSnapshot); } catch (e) {}
+      } else if (Array.isArray(history.pocketsSnapshot)) {
+        pockets = history.pocketsSnapshot;
+      }
+
+      const pocket = pockets.find(p => p.categoryId === categoryId);
+      if (pocket) {
+        limit = pocket.limitAmount || 0;
+        categoryName = pocket.categoryName || categoryName;
+      }
+    }
     
     // Jika user belum set budget, kita tidak bisa hitung zona
-    if (!budget) {
+    if (limit <= 0) {
       return { 
         success: true, 
         data: null, 
         message: "No budget set for this category" 
       };
     }
-
-    const limit = budget.amount_limit;
 
     // 2. Hitung Total Terpakai
     const spent = await transactionRepository.sumExpenseByCategory(userId, categoryId, startOfMonth, endOfMonth);
@@ -70,7 +90,7 @@ export const getDailyBudgetStatusUseCase = async (userId: string, categoryId: st
     return {
       success: true,
       data: {
-        category: budget.category.name,
+        category: categoryName,
         limit_month: limit,
         spent_so_far: spent,
         remaining: remaining,

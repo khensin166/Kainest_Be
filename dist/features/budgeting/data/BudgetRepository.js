@@ -2,18 +2,15 @@
 import { prisma } from "../../../infrastructure/database/prisma.js";
 export const budgetRepository = {
     /**
-     * Cari Budget Limit user untuk kategori tertentu di bulan tertentu
+     * Cari Monthly History user di bulan tertentu
      */
-    async findBudgetLimit(userId, categoryId, monthDate) {
-        // monthDate harus diset ke tanggal 1 bulan itu agar match database
-        return prisma.budget.findFirst({
+    async findMonthlyHistory(userId, monthDate) {
+        return prisma.monthlyFinancialHistory.findUnique({
             where: {
-                userId: userId,
-                categoryId: categoryId,
-                period: monthDate,
-            },
-            include: {
-                category: true, // Kita butuh nama kategorinya nanti
+                userId_period: {
+                    userId: userId,
+                    period: monthDate,
+                },
             },
         });
     },
@@ -37,53 +34,29 @@ export const budgetRepository = {
             orderBy: { name: "asc" },
         });
     },
-    async upsertBudget(userId, categoryId, period, amount, isAiAdjusted = false) {
-        return prisma.budget.upsert({
+    async upsertMonthlyHistory(userId, period, data) {
+        return prisma.monthlyFinancialHistory.upsert({
             where: {
-                userId_categoryId_period: {
-                    // Compound unique key di schema
+                userId_period: {
                     userId,
-                    categoryId,
                     period,
                 },
             },
-            update: { amount_limit: amount, is_ai_adjusted: isAiAdjusted },
+            update: {
+                salarySnapshot: data.salarySnapshot,
+                totalBudgeted: data.totalBudgeted,
+                totalSaved: data.totalSaved,
+                pocketsSnapshot: data.pocketsSnapshot,
+                ...(data.totalSpent !== undefined && { totalSpent: data.totalSpent })
+            },
             create: {
                 userId,
-                categoryId,
                 period,
-                amount_limit: amount,
-                is_ai_adjusted: isAiAdjusted,
-            },
-        });
-    },
-    /**
-     * Menghapus budget untuk bulan tertentu yang kategorinya TIDAK ada dalam daftar.
-     * Ini digunakan untuk sinkronisasi dengan Kantong (Pocket) agar data budget yang stale terhapus.
-     */
-    async deleteBudgetsNotInCategories(userId, period, keepCategoryIds) {
-        return prisma.budget.deleteMany({
-            where: {
-                userId: userId,
-                period: period,
-                categoryId: {
-                    notIn: keepCategoryIds
-                }
-            }
-        });
-    },
-    /**
-     * Ambil semua budget user di bulan tertentu
-     * + Include kategori untuk nama & icon
-     */
-    async findBudgetsByMonth(userId, monthDate) {
-        return prisma.budget.findMany({
-            where: {
-                userId: userId,
-                period: monthDate,
-            },
-            include: {
-                category: true,
+                salarySnapshot: data.salarySnapshot,
+                totalBudgeted: data.totalBudgeted,
+                totalSaved: data.totalSaved,
+                pocketsSnapshot: data.pocketsSnapshot,
+                totalSpent: data.totalSpent || 0
             },
         });
     },
