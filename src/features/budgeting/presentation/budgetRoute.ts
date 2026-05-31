@@ -22,6 +22,7 @@ import {
   bulkSetupPocketsController,
   updateKeywordsController,
   classifyTransactionController,
+  getMonthlyHistoryController,
 } from "../services/budgetController.js";
 
 export const budgetRoute = new Hono();
@@ -96,3 +97,9 @@ budgetRoute.patch("/categories/:categoryId/keywords", updateKeywordsController);
 // POST: Klasifikasi teks pengeluaran via AI (Grok)
 budgetRoute.post("/classify", classifyTransactionController);
 
+// ==========================================
+// 📅 MONTHLY HISTORY ROUTES
+// ==========================================
+
+// GET: Riwayat keuangan bulanan user
+budgetRoute.get("/history", getMonthlyHistoryController);

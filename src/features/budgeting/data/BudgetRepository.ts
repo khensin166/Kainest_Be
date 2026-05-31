@@ -16,6 +16,16 @@ export const budgetRepository = {
     });
   },
 
+  /**
+   * Ambil semua riwayat keuangan bulanan milik user, diurutkan dari yang terbaru
+   */
+  async findAllMonthlyHistory(userId: string) {
+    return prisma.monthlyFinancialHistory.findMany({
+      where: { userId },
+      orderBy: { period: "desc" },
+    });
+  },
+
   async findUserById(userId: string) {
     return prisma.user.findUnique({
       where: { id: userId },

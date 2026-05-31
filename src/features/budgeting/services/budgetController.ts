@@ -17,6 +17,7 @@ import { deletePocketUseCase } from "../domain/use-cases/DeletePocketUseCase.js"
 import { bulkSetupPocketsUseCase } from "../domain/use-cases/BulkSetupPocketsUseCase.js";
 import { updateCategoryKeywordsUseCase } from "../domain/use-cases/UpdateCategoryKeywordsUseCase.js";
 import { classifyTransactionUseCase } from "../domain/use-cases/ClassifyTransactionUseCase.js";
+import { getMonthlyHistoryUseCase } from "../domain/use-cases/GetMonthlyHistoryUseCase.js";
 // === Create Transaction ===
 export const createTransactionController = async (c: Context) => {
   const userId = c.get("userId"); // Dari authMiddleware
@@ -272,5 +273,18 @@ export const classifyTransactionController = async (c: Context) => {
   const result = await classifyTransactionUseCase(userId, body.text);
 
   if (!result.success) c.status(500);
+  return c.json(result);
+};
+
+// ==========================================
+// 📅 MONTHLY HISTORY CONTROLLER
+// ==========================================
+
+// === GET: Riwayat Keuangan Bulanan ===
+export const getMonthlyHistoryController = async (c: Context) => {
+  const userId = c.get("userId");
+  const result = await getMonthlyHistoryUseCase(userId);
+
+  if (!result.success) c.status(result.status as any);
   return c.json(result);
 };
