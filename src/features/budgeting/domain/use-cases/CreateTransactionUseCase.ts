@@ -1,4 +1,5 @@
 import { transactionRepository } from "../../data/TransactionRepository.js";
+import { budgetRepository } from "../../data/BudgetRepository.js";
 
 type InputData = {
   userId: string;
@@ -25,6 +26,9 @@ export const createTransactionUseCase = async (data: InputData) => {
       note: data.note,
       date: txDate,
     });
+
+    // Write-Time Sync untuk riwayat bulanan
+    await budgetRepository.syncMonthlyHistory(data.userId, txDate);
 
     return { success: true, data: newTx };
   } catch (error) {

@@ -76,6 +76,53 @@ export const budgetRepository = {
     });
   },
 
+  /**
+   * CQRS: Write-Time Sync
+   * Menghitung ulang total pengeluaran per kategori untuk suatu bulan
+   * dan menyimpannya langsung ke MonthlyFinancialHistory.
+   */
+  async syncMonthlyHistory(userId: string, targetDate: Date) {
+    try {
+      const startDate = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), 1));
+      const nextMonthStart = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth() + 1, 1));
+      const endDate = new Date(nextMonthStart.getTime() - 1);
+
+      const history = await this.findMonthlyHistory(userId, startDate);
+      if (!history) return;
+
+      const expenses = await this.getMonthlyExpenseGrouped(userId, startDate, endDate);
+
+      let pocketsSnapshot: any[] = [];
+      if (history.pocketsSnapshot) {
+          if (typeof history.pocketsSnapshot === 'string') {
+              try { pocketsSnapshot = JSON.parse(history.pocketsSnapshot); } catch (e) {}
+          } else if (Array.isArray(history.pocketsSnapshot)) {
+              pocketsSnapshot = history.pocketsSnapshot as any[];
+          }
+      }
+
+      pocketsSnapshot = pocketsSnapshot.map((pocket) => {
+        const expense = expenses.find((e) => e.categoryId === pocket.categoryId);
+        pocket.spent = expense?._sum.amount || 0;
+        return pocket;
+      });
+
+      const totalSpent = expenses.reduce((acc, curr) => acc + (curr._sum.amount || 0), 0);
+
+      await prisma.monthlyFinancialHistory.update({
+        where: { id: history.id },
+        data: {
+          totalSpent: totalSpent,
+          pocketsSnapshot: pocketsSnapshot
+        }
+      });
+
+      console.log(`✅ [Write-Time Sync] History ${startDate.toISOString()} synced. Total Spent: ${totalSpent}`);
+    } catch (e) {
+      console.error("❌ [Write-Time Sync] Gagal sinkronisasi:", e);
+    }
+  },
+
   async upsertMonthlyHistory(
     userId: string,
     period: Date,
