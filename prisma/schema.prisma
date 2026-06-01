@@ -32,6 +32,8 @@ model Photo {
   createdAt  DateTime @default(now())
   couple     Couple?  @relation(fields: [coupleId], references: [id])
   uploader   User     @relation(fields: [uploadedBy], references: [id])
+  
+  @@index([coupleId])
   @@schema("kainest")
 }
 
@@ -136,6 +138,9 @@ model Todo {
   updatedAt    DateTime @updatedAt
   couple       Couple   @relation("CoupleTodos", fields: [coupleId], references: [id], onDelete: Cascade)
   createdBy    User     @relation("UserTodos", fields: [createdById], references: [id], onDelete: Cascade)
+  
+  @@index([coupleId])
+  @@index([createdById])
   @@schema("kainest")
 }
 
@@ -151,6 +156,9 @@ model Note {
   partnerPermission NotePermission @default(VIEWER)
   author            User           @relation("UserNotes", fields: [authorId], references: [id], onDelete: Cascade)
   couple            Couple?        @relation("CoupleNotes", fields: [coupleId], references: [id])
+  
+  @@index([authorId])
+  @@index([coupleId])
   @@schema("kainest")
 }
 
@@ -188,6 +196,9 @@ model BudgetCategory {
 
   transactions Transaction[]
   pockets      BudgetPocket[] // Relasi ke BudgetPocket
+
+  @@index([userId])
+  @@index([isDefault])
   @@schema("kainest")
 }
 
@@ -254,6 +265,9 @@ model Transaction {
   category   BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+
+  @@index([userId, date])
+  @@index([categoryId])
   @@schema("kainest")
 }
 
@@ -269,6 +283,8 @@ model AISuggestion {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+
+  @@index([userId])
   @@schema("kainest")
 }
 

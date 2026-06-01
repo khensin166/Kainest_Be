@@ -250,6 +250,7 @@ Middleware global yang di-mount di `app.ts` **setelah CORS dan sebelum semua rou
 | 8 | **Optimasi Serverless Vercel** | Region fungsi Vercel dikonfigurasi ke `sin1` (Singapura) agar selaras dengan lokasi Supabase DB guna meminimalkan latency. |
 | 9 | **Endpoint `GET /budget/history`** | `findAllMonthlyHistory(userId)` ditambahkan ke `BudgetRepository.ts`. Use Case baru `GetMonthlyHistoryUseCase.ts` dibuat. Controller `getMonthlyHistoryController` dan route `GET /budget/history` didaftarkan. Mengembalikan seluruh riwayat bulanan milik user diurutkan `period: desc`. |
 | 10 | **Perbaikan `createCustomCategory` (Keamanan)** | Validasi kepemilikan ditambahkan: hanya user yang terautentikasi dapat membuat kategori, dan `userId` diambil dari sesi server (bukan dari body request) untuk mencegah injeksi. |
+| 11 | **Perbaikan Sinkronisasi Data Pocket (Anti-Zombie)** | Menerapkan `deleteMany` sebelum `upsert` pada `bulkUpsertPockets` di `PocketRepository.ts` agar kantong lama yang dihapus/diganti dari payload tidak menjadi zombie di database. Serta penambahan validasi duplikat kategori di `BulkSetupPocketsUseCase.ts`. |
 
 ---
 
