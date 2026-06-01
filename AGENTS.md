@@ -111,6 +111,14 @@ Catatan pengeluaran/pemasukan harian.
 #### `AISuggestion`
 Log saran finansial yang dihasilkan oleh AI Groq.
 
+#### `BotActiveGroup` 🆕
+Menyimpan ID grup WhatsApp yang telah diaktifkan untuk bot pencatatan keuangan (Kainest WA Bot).
+- `id: String` (Primary Key, UUID)
+- `groupId: String` (@unique, ID grup dari WhatsApp/Baileys)
+- `createdAt: DateTime`
+- `@index([groupId])`
+- `@@schema("kainest")`
+
 ---
 
 ## 4. SPESIFIKASI ENDPOINT & API (API SPECIFICATION)
@@ -255,12 +263,14 @@ Middleware global yang di-mount di `app.ts` **setelah CORS dan sebelum semua rou
 | 13 | **Perbaikan Kalkulasi Tabungan (Actual vs Target)** | Kalkulasi `totalSaved` di `syncMonthlyHistory` pada `BudgetRepository.ts` diubah agar menggunakan nilai pengeluaran riil (uang yang dialokasikan ke kategori tabungan) alih-alih limit target, serta mengecualikan nilai tabungan tersebut dari `totalSpent` (aktual pengeluaran). |
 | 14 | **Preservasi Data Riwayat Bulanan Saat Setup Pocket/Budget** | Mengubah `BulkSetupPocketsUseCase.ts` dan `SetupMonthlyBudgetUseCase.ts` agar tetap mempertahankan nilai `totalSaved` dan `totalSpent` ketika memperbarui kantong, dilanjutkan dengan memanggil `syncMonthlyHistory` agar data terhitung ulang dengan aman. |
 | 15 | **Script Migrasi & Sinkronisasi Backfill (`force-sync-pockets.ts`)** | Membuat script utility `force-sync-pockets.ts` untuk memigrasi dan melakukan sinkronisasi data riwayat keuangan bulanan historis (November 2025 s.d. April 2026) dengan template layout pocket saat ini agar data rencana, aktual, dan tabungan sinkron. |
+| 16 | **Migrasi Skema Bot WhatsApp (`BotActiveGroup`)** | Menambahkan model `BotActiveGroup` ke `schema.prisma` dan menyinkronkan database Supabase menggunakan `prisma db push` untuk menyimpan data grup WA aktif bagi integrasi WhatsApp Bot komersial. |
 
 ---
 
 ## 8. RENCANA PENGEMBANGAN MASA DEPAN (FUTURE DEVELOPMENT)
 
 1. **Integrasi WhatsApp Bot (Kenin WA Bot)**: Pencatatan transaksi via chat WhatsApp menggunakan `classifyTransactionUseCase`.
+   - *Penyimpanan Grup Aktif*: Database sudah dimigrasi dengan tabel `BotActiveGroup` untuk memfasilitasi aktivasi/deaktivasi bot per grup WhatsApp menggunakan perintah `!aktifkan-kainest` dan `!nonaktifkan-kainest`.
    - *Arsitektur Multi-User*: Menggunakan pencocokan nomor WhatsApp JID pengirim dengan kolom `whatsappNumber` di tabel `User`.
    - *Keamanan API*: Mengamankan endpoint bot `POST /api/bot/transactions` menggunakan API Key rahasia khusus server-to-server (n8n ke Backend).
    - *Optimasi Token*: Menerapkan sistem *Hybrid Routing*. Pesan masuk divalidasi dengan pencocokan kata kunci (*rule-based keyword matching*) di database terlebih dahulu. Jika cocok, catat langsung; jika tidak cocok, baru teruskan ke Groq AI (Llama 8B) sebagai *fallback* guna menghemat token hingga 80%.
@@ -269,4 +279,4 @@ Middleware global yang di-mount di `app.ts` **setelah CORS dan sebelum semua rou
 4. **Pendeteksi Pengeluaran Berulang**: Analisis AI untuk mengenali transaksi bulanan otomatis (sewa, langganan) dan memasukkannya secara berkala ke kantong yang sesuai.
 5. **Handbook / Panduan Fitur In-App (Backend Support)**: Endpoint opsional untuk menyajikan konten panduan yang dapat diperbarui secara dinamis (misal: API untuk mengambil teks panduan per fitur).
 6. **Pembatasan Query Default Riwayat (6/12 Bulan)**: Method `findAllMonthlyHistory` saat ini mengambil semua record tanpa batas. Perlu ditambahkan parameter opsional `take` (misal `take: 12`) pada query Prisma agar default hanya mengembalikan 6 atau 12 bulan terakhir.
-7. **Filter Query Tahun/Bulan pada Endpoint History**: Menambahkan dukungan query parameter `?year=2026` atau `?from=2026-01&to=2026-12` pada endpoint `GET /budget/history` agar frontend dapat memfilter rentang waktu yang diinginkan tanpa mengambil semua data.
+7. **Filter Query Tahun/Bulan pada Endpoint History**: Menambahkan dukungan query parameter `?year=2026` or `?from=2026-01&to=2026-12` pada endpoint `GET /budget/history` agar frontend dapat memfilter rentang waktu yang diinginkan tanpa mengambil semua data.
