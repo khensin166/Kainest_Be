@@ -113,7 +113,7 @@ Log saran finansial yang dihasilkan oleh AI Groq.
 
 #### `BotActiveGroup` 🆕
 Menyimpan ID grup WhatsApp yang telah diaktifkan untuk bot pencatatan keuangan (Kainest WA Bot).
-- `id: String` (Primary Key, UUID)
+- `id: String` (Primary Key, UUID, default auto-generate via database `gen_random_uuid()`)
 - `groupId: String` (@unique, ID grup dari WhatsApp/Baileys)
 - `createdAt: DateTime`
 - `@index([groupId])`
