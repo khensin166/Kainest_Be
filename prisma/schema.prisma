@@ -356,3 +356,16 @@ model Verification {
   @@index([identifier])
   @@schema("kainest")
 }
+
+// ==========================================
+// 🤖 WHATSAPP BOT SYSTEM
+// ==========================================
+
+model BotActiveGroup {
+  id        String   @id @default(uuid())
+  groupId   String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([groupId])
+  @@schema("kainest")
+}
