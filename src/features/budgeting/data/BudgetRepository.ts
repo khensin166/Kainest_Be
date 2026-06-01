@@ -87,10 +87,49 @@ export const budgetRepository = {
       const nextMonthStart = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth() + 1, 1));
       const endDate = new Date(nextMonthStart.getTime() - 1);
 
-      const history = await this.findMonthlyHistory(userId, startDate);
-      if (!history) return;
+      let history = await this.findMonthlyHistory(userId, startDate);
+      if (!history) {
+        // Jika history tidak ada, buat baru berdasarkan konfigurasi pocket user saat ini
+        const user = await this.findUserById(userId);
+        if (!user) return;
+
+        const activePockets = await prisma.budgetPocket.findMany({
+          where: { userId },
+          include: { category: true }
+        });
+
+        const pocketsSnapshot = activePockets.map(p => ({
+          categoryId: p.categoryId,
+          categoryName: p.category.name,
+          limitAmount: p.limitAmount || 0,
+          icon: p.category.icon || '💰',
+          spent: 0
+        }));
+
+        let totalBudgeted = pocketsSnapshot.reduce((acc, p) => acc + p.limitAmount, 0);
+        let totalSaved = 0;
+
+        const savingPocket = pocketsSnapshot.find(p => p.categoryName.toLowerCase().includes('tabungan') || p.categoryName.toLowerCase().includes('saving'));
+        if (savingPocket) {
+           totalSaved = savingPocket.limitAmount;
+           totalBudgeted -= savingPocket.limitAmount;
+        }
+
+        history = await this.upsertMonthlyHistory(userId, startDate, {
+           salarySnapshot: user.salary || 0,
+           totalBudgeted: totalBudgeted,
+           totalSaved: totalSaved,
+           pocketsSnapshot: pocketsSnapshot,
+           totalSpent: 0
+        });
+      }
 
       const expenses = await this.getMonthlyExpenseGrouped(userId, startDate, endDate);
+
+      let actualSaved = 0;
+      let totalSpent = 0;
+
+      const allCategories = await this.findAllCategories(userId);
 
       let pocketsSnapshot: any[] = [];
       if (history.pocketsSnapshot) {
@@ -107,12 +146,22 @@ export const budgetRepository = {
         return pocket;
       });
 
-      const totalSpent = expenses.reduce((acc, curr) => acc + (curr._sum.amount || 0), 0);
+      expenses.forEach(curr => {
+        const cat = allCategories.find(c => c.id === curr.categoryId);
+        const isSavings = cat && (cat.name.toLowerCase().includes('tabungan') || cat.name.toLowerCase().includes('saving'));
+        
+        if (isSavings) {
+            actualSaved += (curr._sum.amount || 0);
+        } else {
+            totalSpent += (curr._sum.amount || 0);
+        }
+      });
 
       await prisma.monthlyFinancialHistory.update({
         where: { id: history.id },
         data: {
           totalSpent: totalSpent,
+          totalSaved: actualSaved,
           pocketsSnapshot: pocketsSnapshot
         }
       });

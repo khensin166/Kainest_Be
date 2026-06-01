@@ -59,10 +59,12 @@ export const setupMonthlyBudgetUseCase = async (data: SetupData) => {
         await budgetRepository.upsertMonthlyHistory(userId, period, {
             salarySnapshot: salary,
             totalBudgeted: totalBudgeted,
-            totalSaved: totalSaved,
+            totalSaved: existingHistory?.totalSaved || 0,
             pocketsSnapshot: pocketsSnapshot,
             totalSpent: existingHistory?.totalSpent || 0
         });
+        
+        await budgetRepository.syncMonthlyHistory(userId, period);
     }
 
     return {
