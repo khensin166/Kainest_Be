@@ -125,6 +125,7 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
     // 5. Hitung Total Keseluruhan
     const totalLimit = summary.reduce((acc, curr) => acc + curr.limit, 0);
     const totalSpent = summary.reduce((acc, curr) => acc + curr.spent, 0);
+    const unallocated = Math.max(0, salary - totalLimit); // Uang yang belum masuk ke kantong manapun
 
     return {
       success: true,
@@ -138,10 +139,12 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
           limit: totalLimit,
           spent: totalSpent,
           remaining: totalLimit - totalSpent,
+          unallocated: unallocated, // Selisih gaji - total limit kantong
         },
         categories: summary,
       },
     };
+
   } catch (error) {
     console.error("Get Summary Error:", error);
     return {

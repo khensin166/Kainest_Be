@@ -139,6 +139,7 @@ Semua endpoint di bawah path `/budget/`, `/profile/`, `/couple/`, dll. **diwajib
 | Method | Endpoint | Deskripsi | Auth |
 |---|---|---|---|
 | `GET` | `/budget/summary` | Ambil ringkasan keuangan bulan berjalan dari `MonthlyFinancialHistory`. Jika history bulan ini belum ada, sistem akan **otomatis membuatnya (lazy loading)** dari template `BudgetPocket` user. | ✅ |
+| `GET` | `/budget/history` | 🆕 Ambil **seluruh riwayat keuangan bulanan** milik user, diurutkan dari yang terbaru. Digunakan oleh halaman Riwayat Keuangan Bulanan di frontend. | ✅ |
 | `GET` | `/budget/trend` | Data pengeluaran harian (untuk grafik). | ✅ |
 | `POST` | `/budget/setup` | Setup konfigurasi awal gaji user. | ✅ |
 
@@ -247,12 +248,20 @@ Middleware global yang di-mount di `app.ts` **setelah CORS dan sebelum semua rou
 | 6 | **Refactoring AI Use Cases** | `EvaluateMonthlyBudgetUseCase`, `GetDailyBudgetStatusUseCase` direfactor agar membaca limit dari `pocketsSnapshot` JSON alih-alih tabel `Budget` yang sudah dihapus. |
 | 7 | **Better Auth Alignment** | Route auth diselaraskan dengan standard endpoints Better Auth. Alur social login callback (`/auth/social-callback`) menggunakan token via URL hash untuk menghindari masalah cross-domain cookie. |
 | 8 | **Optimasi Serverless Vercel** | Region fungsi Vercel dikonfigurasi ke `sin1` (Singapura) agar selaras dengan lokasi Supabase DB guna meminimalkan latency. |
+| 9 | **Endpoint `GET /budget/history`** | `findAllMonthlyHistory(userId)` ditambahkan ke `BudgetRepository.ts`. Use Case baru `GetMonthlyHistoryUseCase.ts` dibuat. Controller `getMonthlyHistoryController` dan route `GET /budget/history` didaftarkan. Mengembalikan seluruh riwayat bulanan milik user diurutkan `period: desc`. |
+| 10 | **Perbaikan `createCustomCategory` (Keamanan)** | Validasi kepemilikan ditambahkan: hanya user yang terautentikasi dapat membuat kategori, dan `userId` diambil dari sesi server (bukan dari body request) untuk mencegah injeksi. |
 
 ---
 
 ## 8. RENCANA PENGEMBANGAN MASA DEPAN (FUTURE DEVELOPMENT)
 
 1. **Integrasi WhatsApp Bot (Kenin WA Bot)**: Pencatatan transaksi via chat WhatsApp menggunakan `classifyTransactionUseCase`.
+   - *Arsitektur Multi-User*: Menggunakan pencocokan nomor WhatsApp JID pengirim dengan kolom `whatsappNumber` di tabel `User`.
+   - *Keamanan API*: Mengamankan endpoint bot `POST /api/bot/transactions` menggunakan API Key rahasia khusus server-to-server (n8n ke Backend).
+   - *Optimasi Token*: Menerapkan sistem *Hybrid Routing*. Pesan masuk divalidasi dengan pencocokan kata kunci (*rule-based keyword matching*) di database terlebih dahulu. Jika cocok, catat langsung; jika tidak cocok, baru teruskan ke Groq AI (Llama 8B) sebagai *fallback* guna menghemat token hingga 80%.
 2. **Rekomendasi Rebalancing Otomatis**: AI menyarankan penyesuaian alokasi kantong berdasarkan riwayat pengeluaran `MonthlyFinancialHistory` bulan-bulan sebelumnya.
 3. **Pipeline ETL Log**: Mengekstrak file log harian (`logs/kainest_api_YYYYMMDD.log`) ke data warehouse (PostgreSQL / BigQuery) untuk analisis penggunaan dan deteksi anomali.
 4. **Pendeteksi Pengeluaran Berulang**: Analisis AI untuk mengenali transaksi bulanan otomatis (sewa, langganan) dan memasukkannya secara berkala ke kantong yang sesuai.
+5. **Handbook / Panduan Fitur In-App (Backend Support)**: Endpoint opsional untuk menyajikan konten panduan yang dapat diperbarui secara dinamis (misal: API untuk mengambil teks panduan per fitur).
+6. **Pembatasan Query Default Riwayat (6/12 Bulan)**: Method `findAllMonthlyHistory` saat ini mengambil semua record tanpa batas. Perlu ditambahkan parameter opsional `take` (misal `take: 12`) pada query Prisma agar default hanya mengembalikan 6 atau 12 bulan terakhir.
+7. **Filter Query Tahun/Bulan pada Endpoint History**: Menambahkan dukungan query parameter `?year=2026` atau `?from=2026-01&to=2026-12` pada endpoint `GET /budget/history` agar frontend dapat memfilter rentang waktu yang diinginkan tanpa mengambil semua data.
