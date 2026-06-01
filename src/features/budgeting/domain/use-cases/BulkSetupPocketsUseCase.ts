@@ -31,7 +31,18 @@ export const bulkSetupPocketsUseCase = async (data: BulkSetupData) => {
 
     // Validasi setiap pocket
     let totalPercentage = 0;
+    const uniqueCategoryIds = new Set<string>();
+
     for (const p of pockets) {
+      if (uniqueCategoryIds.has(p.categoryId)) {
+        return {
+          success: false,
+          status: 400,
+          message: `Kategori ganda terdeteksi (ID: ${p.categoryId}). Setiap kantong harus menggunakan kategori yang unik.`,
+        };
+      }
+      uniqueCategoryIds.add(p.categoryId);
+
       if (p.percentage != null && (p.percentage < 0 || p.percentage > 100)) {
         return {
           success: false,

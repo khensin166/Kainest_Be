@@ -63,6 +63,21 @@ export const pocketRepository = {
       limitAmount?: number | null;
     }>
   ) {
+    // 1. Dapatkan daftar categoryId yang ada di payload baru
+    const categoryIds = pockets.map((p) => p.categoryId);
+
+    // 2. Hapus semua kantong user yang TIDAK ADA di payload
+    // Ini penting agar jika user mengganti/menghapus kantong, data lama tidak menjadi zombie
+    if (categoryIds.length > 0) {
+      await prisma.budgetPocket.deleteMany({
+        where: {
+          userId,
+          categoryId: { notIn: categoryIds },
+        },
+      });
+    }
+
+    // 3. Upsert sisanya
     const results = [];
     for (const pocket of pockets) {
       const result = await prisma.budgetPocket.upsert({
