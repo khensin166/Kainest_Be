@@ -41,4 +41,24 @@ export const botTransactionRepository = {
 
     return user;
   },
+  /**
+   * Cari user berdasarkan invitation code
+   */
+  async getUserByInvitationCode(code: string) {
+    const profile = await prisma.userProfile.findUnique({
+      where: { invitationCode: code },
+      include: { user: true }
+    });
+    return profile?.user || null;
+  },
+
+  /**
+   * Update kolom whatsappJid di tabel User
+   */
+  async updateWhatsappJid(userId: string, jid: string) {
+    return prisma.user.update({
+      where: { id: userId },
+      data: { whatsappJid: jid },
+    });
+  },
 };

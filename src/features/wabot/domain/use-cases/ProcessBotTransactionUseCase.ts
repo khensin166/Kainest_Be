@@ -28,6 +28,30 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   // Contoh sender: 62812345678@s.whatsapp.net atau 172662131298437@lid
   let cleanSender = data.sender.replace("@s.whatsapp.net", "").replace("@c.us", "").replace("@lid", "");
 
+  // 3.5 Intercept Perintah !link
+  const textMsg = data.text.trim();
+  if (textMsg.startsWith("!link ")) {
+    const code = textMsg.split(" ")[1];
+    if (!code) {
+      return { success: false, status: 400, message: "Kode undangan tidak valid." };
+    }
+    
+    const userToLink = await botTransactionRepository.getUserByInvitationCode(code);
+    if (!userToLink) {
+      return { success: false, status: 404, message: "Kode tidak valid atau akun tidak ditemukan." };
+    }
+
+    // Update whatsappJid
+    await botTransactionRepository.updateWhatsappJid(userToLink.id, cleanSender);
+    
+    return {
+      success: true,
+      data: {
+        message: "✅ Berhasil! Akun Kainest Anda kini terhubung. Anda sekarang bisa mulai mencatat pengeluaran dari WhatsApp."
+      }
+    };
+  }
+
   // 4. Identifikasi User
   const user = await botTransactionRepository.getUserByPhoneNumber(cleanSender);
   if (!user) {
