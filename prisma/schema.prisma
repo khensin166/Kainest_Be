@@ -80,6 +80,7 @@ model User {
   image            String?
   sessions         Session[]
   accounts         Account[]
+  waBotConfig      WaBotConfig?
 
   // --- NEW: ROLE & PERMISSIONS (Better Auth Admin Plugin) ---
   role        String?  @default("user")
@@ -305,7 +306,7 @@ model WaBotConfig {
 
   // Relasi ke User (Pastikan model User Anda ada di schema ini juga)
   // Jika relasi ini error, Anda bisa menonaktifkannya dulu dengan menghapus baris di bawah ini
-  // user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@schema("kainest")
 }
