@@ -14,9 +14,14 @@ export const botTransactionRepository = {
    * Cari user berdasarkan nomor telepon (exact match atau contains)
    */
   async getUserByPhoneNumber(phoneNumber: string) {
-    // Kita coba exact match dulu
-    let user = await prisma.user.findUnique({
-      where: { phone_number: phoneNumber },
+    // Kita coba exact match dulu ke whatsappJid atau phone_number
+    let user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { whatsappJid: phoneNumber },
+          { phone_number: phoneNumber }
+        ]
+      },
     });
 
     if (!user) {

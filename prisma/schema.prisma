@@ -56,6 +56,7 @@ model User {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime?         @updatedAt
   phone_number String?           @unique
+  whatsappJid  String?           @unique // Untuk menampung @lid atau format JID unik lainnya
   couples1     Couple[]          @relation("User1Couple")
   couples2     Couple[]          @relation("User2Couple")
   notes        Note[]            @relation("UserNotes")
