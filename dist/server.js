@@ -7,4 +7,5 @@ serve({
     fetch: app.fetch,
     port: PORT,
 });
+// console log
 console.log(`🚀 Server running at http://localhost:${PORT}`);

@@ -3,70 +3,208 @@ import { prisma } from "../../../infrastructure/database/prisma.js";
 
 export const budgetRepository = {
   /**
-   * Cari Budget Limit user untuk kategori tertentu di bulan tertentu
+   * Cari Monthly History user di bulan tertentu
    */
-  async findBudgetLimit(userId: string, categoryId: string, monthDate: Date) {
-    // monthDate harus diset ke tanggal 1 bulan itu agar match database
-    return prisma.budget.findFirst({
+  async findMonthlyHistory(userId: string, monthDate: Date) {
+    return prisma.monthlyFinancialHistory.findUnique({
       where: {
-        userId: userId,
-        categoryId: categoryId,
-        period: monthDate,
-      },
-      include: {
-        category: true, // Kita butuh nama kategorinya nanti
+        userId_period: {
+          userId: userId,
+          period: monthDate,
+        },
       },
     });
   },
 
   /**
-   * Ambil semua kategori (untuk dropdown saat input transaksi)
+   * Ambil semua riwayat keuangan bulanan milik user, diurutkan dari yang terbaru
    */
-  async findAllCategories() {
+  async findAllMonthlyHistory(userId: string) {
+    return prisma.monthlyFinancialHistory.findMany({
+      where: { userId },
+      orderBy: { period: "desc" },
+    });
+  },
+
+  async findUserById(userId: string) {
+    return prisma.user.findUnique({
+      where: { id: userId },
+      select: { salary: true }
+    });
+  },
+
+  async updateUserSalary(userId: string, salary: number) {
+    return prisma.user.update({
+      where: { id: userId },
+      data: { salary }
+    });
+  },
+
+  /**
+   * Ambil semua kategori (Global + Custom milik User)
+   */
+  async findAllCategories(userId?: string) {
     return prisma.budgetCategory.findMany({
+      where: userId ? {
+        OR: [
+          { isDefault: true },
+          { userId: null },
+          { userId: userId }
+        ]
+      } : {
+        OR: [
+          { isDefault: true },
+          { userId: null }
+        ]
+      },
       orderBy: { name: "asc" },
     });
   },
 
-  async upsertBudget(
-    userId: string,
-    categoryId: string,
-    period: Date,
-    amount: number,
-    isAiAdjusted = false
-  ) {
-    return prisma.budget.upsert({
-      where: {
-        userId_categoryId_period: {
-          // Compound unique key di schema
-          userId,
-          categoryId,
-          period,
-        },
-      },
-      update: { amount_limit: amount, is_ai_adjusted: isAiAdjusted },
-      create: {
-        userId,
-        categoryId,
-        period,
-        amount_limit: amount,
-        is_ai_adjusted: isAiAdjusted,
-      },
+  /**
+   * Membuat kategori kustom milik user
+   */
+  async createCustomCategory(userId: string, name: string, icon: string) {
+    return prisma.budgetCategory.create({
+      data: {
+        name,
+        icon,
+        type: "EXPENSE",
+        isDefault: false,
+        userId: userId,
+      }
     });
   },
 
   /**
-   * Ambil semua budget user di bulan tertentu
-   * + Include kategori untuk nama & icon
+   * CQRS: Write-Time Sync
+   * Menghitung ulang total pengeluaran per kategori untuk suatu bulan
+   * dan menyimpannya langsung ke MonthlyFinancialHistory.
    */
-  async findBudgetsByMonth(userId: string, monthDate: Date) {
-    return prisma.budget.findMany({
+  async syncMonthlyHistory(userId: string, targetDate: Date) {
+    try {
+      const startDate = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), 1));
+      const nextMonthStart = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth() + 1, 1));
+      const endDate = new Date(nextMonthStart.getTime() - 1);
+
+      let history = await this.findMonthlyHistory(userId, startDate);
+      if (!history) {
+        // Jika history tidak ada, buat baru berdasarkan konfigurasi pocket user saat ini
+        const user = await this.findUserById(userId);
+        if (!user) return;
+
+        const activePockets = await prisma.budgetPocket.findMany({
+          where: { userId },
+          include: { category: true }
+        });
+
+        const pocketsSnapshot = activePockets.map(p => ({
+          categoryId: p.categoryId,
+          categoryName: p.category.name,
+          limitAmount: p.limitAmount || 0,
+          icon: p.category.icon || '💰',
+          spent: 0
+        }));
+
+        let totalBudgeted = pocketsSnapshot.reduce((acc, p) => acc + p.limitAmount, 0);
+        let totalSaved = 0;
+
+        const savingPocket = pocketsSnapshot.find(p => p.categoryName.toLowerCase().includes('tabungan') || p.categoryName.toLowerCase().includes('saving'));
+        if (savingPocket) {
+           totalSaved = savingPocket.limitAmount;
+           totalBudgeted -= savingPocket.limitAmount;
+        }
+
+        history = await this.upsertMonthlyHistory(userId, startDate, {
+           salarySnapshot: user.salary || 0,
+           totalBudgeted: totalBudgeted,
+           totalSaved: totalSaved,
+           pocketsSnapshot: pocketsSnapshot,
+           totalSpent: 0
+        });
+      }
+
+      const expenses = await this.getMonthlyExpenseGrouped(userId, startDate, endDate);
+
+      let actualSaved = 0;
+      let totalSpent = 0;
+
+      const allCategories = await this.findAllCategories(userId);
+
+      let pocketsSnapshot: any[] = [];
+      if (history.pocketsSnapshot) {
+          if (typeof history.pocketsSnapshot === 'string') {
+              try { pocketsSnapshot = JSON.parse(history.pocketsSnapshot); } catch (e) {}
+          } else if (Array.isArray(history.pocketsSnapshot)) {
+              pocketsSnapshot = history.pocketsSnapshot as any[];
+          }
+      }
+
+      pocketsSnapshot = pocketsSnapshot.map((pocket) => {
+        const expense = expenses.find((e) => e.categoryId === pocket.categoryId);
+        pocket.spent = expense?._sum.amount || 0;
+        return pocket;
+      });
+
+      expenses.forEach(curr => {
+        const cat = allCategories.find(c => c.id === curr.categoryId);
+        const isSavings = cat && (cat.name.toLowerCase().includes('tabungan') || cat.name.toLowerCase().includes('saving'));
+        
+        if (isSavings) {
+            actualSaved += (curr._sum.amount || 0);
+        } else {
+            totalSpent += (curr._sum.amount || 0);
+        }
+      });
+
+      await prisma.monthlyFinancialHistory.update({
+        where: { id: history.id },
+        data: {
+          totalSpent: totalSpent,
+          totalSaved: actualSaved,
+          pocketsSnapshot: pocketsSnapshot
+        }
+      });
+
+      console.log(`✅ [Write-Time Sync] History ${startDate.toISOString()} synced. Total Spent: ${totalSpent}`);
+    } catch (e) {
+      console.error("❌ [Write-Time Sync] Gagal sinkronisasi:", e);
+    }
+  },
+
+  async upsertMonthlyHistory(
+    userId: string,
+    period: Date,
+    data: {
+      salarySnapshot: number;
+      totalBudgeted: number;
+      totalSaved: number;
+      pocketsSnapshot: any;
+      totalSpent?: number;
+    }
+  ) {
+    return prisma.monthlyFinancialHistory.upsert({
       where: {
-        userId: userId,
-        period: monthDate,
+        userId_period: {
+          userId,
+          period,
+        },
       },
-      include: {
-        category: true,
+      update: {
+        salarySnapshot: data.salarySnapshot,
+        totalBudgeted: data.totalBudgeted,
+        totalSaved: data.totalSaved,
+        pocketsSnapshot: data.pocketsSnapshot,
+        ...(data.totalSpent !== undefined && { totalSpent: data.totalSpent })
+      },
+      create: {
+        userId,
+        period,
+        salarySnapshot: data.salarySnapshot,
+        totalBudgeted: data.totalBudgeted,
+        totalSaved: data.totalSaved,
+        pocketsSnapshot: data.pocketsSnapshot,
+        totalSpent: data.totalSpent || 0
       },
     });
   },

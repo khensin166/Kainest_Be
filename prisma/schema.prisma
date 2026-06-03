@@ -1,10 +1,13 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  schemas   = ["kainest"]
 }
 
 model Couple {
@@ -17,6 +20,7 @@ model Couple {
   notes     Note[]   @relation("CoupleNotes")
   photos    Photo[]
   todos     Todo[]   @relation("CoupleTodos")
+  @@schema("kainest")
 }
 
 model Photo {
@@ -28,6 +32,9 @@ model Photo {
   createdAt  DateTime @default(now())
   couple     Couple?  @relation(fields: [coupleId], references: [id])
   uploader   User     @relation(fields: [uploadedBy], references: [id])
+  
+  @@index([coupleId])
+  @@schema("kainest")
 }
 
 model UserProfile {
@@ -38,6 +45,7 @@ model UserProfile {
   createdAt      DateTime @default(now())
   userId         String   @unique
   user           User     @relation(fields: [userId], references: [id])
+  @@schema("kainest")
 }
 
 model User {
@@ -48,6 +56,7 @@ model User {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime?         @updatedAt
   phone_number String?           @unique
+  whatsappJid  String?           @unique // Untuk menampung @lid atau format JID unik lainnya
   couples1     Couple[]          @relation("User1Couple")
   couples2     Couple[]          @relation("User2Couple")
   notes        Note[]            @relation("UserNotes")
@@ -63,9 +72,24 @@ model User {
 
   // Relasi ke fitur Budgeting
   budgetCategories BudgetCategory[] // Kategori custom user
-  budgets          Budget[] // Limit budget bulanan
+  monthlyHistories MonthlyFinancialHistory[] // Raport keuangan bulanan
+  pockets          BudgetPocket[] // Template Kantong User
   transactions     Transaction[] // Catatan pengeluaran
   aiSuggestions    AISuggestion[] // Log saran AI
+  emailVerified    Boolean          @default(false)
+  image            String?
+  sessions         Session[]
+  accounts         Account[]
+  waBotConfig      WaBotConfig?
+
+  // --- NEW: ROLE & PERMISSIONS (Better Auth Admin Plugin) ---
+  role        String?  @default("user")
+  banned      Boolean? @default(false)
+  banReason   String?
+  banExpires  DateTime?
+  permissions String[] @default([]) // Array of allowed modules (e.g. ["budgeting", "notes", "todos", "wabot"])
+
+  @@schema("kainest")
 }
 
 model UserShift {
@@ -77,6 +101,7 @@ model UserShift {
   user       User     @relation(fields: [userId], references: [id])
 
   @@unique([userId, date])
+  @@schema("kainest")
 }
 
 model ShiftActivity {
@@ -89,6 +114,7 @@ model ShiftActivity {
   logs          NotificationLog[]
 
   @@unique([shift_type, reminder_time])
+  @@schema("kainest")
 }
 
 model NotificationLog {
@@ -100,6 +126,7 @@ model NotificationLog {
   user       User          @relation(fields: [userId], references: [id])
 
   @@unique([userId, activityId, sent_at])
+  @@schema("kainest")
 }
 
 model Todo {
@@ -113,6 +140,10 @@ model Todo {
   updatedAt    DateTime @updatedAt
   couple       Couple   @relation("CoupleTodos", fields: [coupleId], references: [id], onDelete: Cascade)
   createdBy    User     @relation("UserTodos", fields: [createdById], references: [id], onDelete: Cascade)
+  
+  @@index([coupleId])
+  @@index([createdById])
+  @@schema("kainest")
 }
 
 model Note {
@@ -127,11 +158,16 @@ model Note {
   partnerPermission NotePermission @default(VIEWER)
   author            User           @relation("UserNotes", fields: [authorId], references: [id], onDelete: Cascade)
   couple            Couple?        @relation("CoupleNotes", fields: [coupleId], references: [id])
+  
+  @@index([authorId])
+  @@index([coupleId])
+  @@schema("kainest")
 }
 
 enum NotePermission {
   VIEWER
   EDITOR
+  @@schema("kainest")
 }
 
 // ==========================================
@@ -141,9 +177,11 @@ enum NotePermission {
 enum TransactionType {
   INCOME
   EXPENSE
+  @@schema("kainest")
 }
 
 // 1. Kategori (Dinamis: Bisa default sistem, bisa custom user)
+
 model BudgetCategory {
   id        String          @id @default(uuid())
   name      String // Contoh: "Makan", "Transport", "Kost"
@@ -152,35 +190,70 @@ model BudgetCategory {
   isDefault Boolean         @default(false) // True jika bawaan sistem
   createdAt DateTime        @default(now())
 
+  // TAMBAHAN BARU UNTUK LLM
+  keywords  String[]        @default([]) // Contoh: ["makan", "minum", "gofood"]
+
   userId String? // Nullable. Jika null = Kategori Global (semua user punya)
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  budgets      Budget[]
   transactions Transaction[]
+  pockets      BudgetPocket[] // Relasi ke BudgetPocket
+
+  @@index([userId])
+  @@index([isDefault])
+  @@schema("kainest")
 }
 
-// 2. Budget Bulanan (Limit per kategori)
-model Budget {
-  id           String   @id @default(uuid())
-  amount_limit Int // Batas budget (misal: 1.500.000)
-  period       DateTime @db.Date // Disimpan per bulan (tgl 1 setiap bulan)
+// 2. Raport Keuangan Bulanan (History)
+model MonthlyFinancialHistory {
+  id              String   @id @default(uuid())
+  userId          String
+  period          DateTime @db.Date // Tanggal 1 setiap bulan (contoh: 2026-05-01)
+  
+  // Snapshots (Fotokopi Gaji & Kondisi di bulan tersebut)
+  salarySnapshot  Int      // Gaji pada bulan ini
+  
+  // Agregasi Totals
+  totalBudgeted   Int      // Total nilai uang yang dialokasikan ke kantong
+  totalSaved      Int      // Total nilai uang yang dialokasikan khusus ke "Tabungan"
+  totalSpent      Int      @default(0) // Total pengeluaran bulan ini
+  
+  // Rincian Kantong (Disimpan sebagai teks JSON)
+  pocketsSnapshot Json     
+  
+  // Ruang untuk AI di masa depan
+  aiEvaluation    String?  @db.Text
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, period]) // Hanya boleh 1 raport per user per bulan
+  @@schema("kainest")
+}
 
-  // Learning Fields
-  is_ai_adjusted Boolean @default(false) // Apakah limit ini hasil saran AI?
+// 2.5 Kantong Budget (Template Limit/Persentase Permanen User)
+model BudgetPocket {
+  id          String   @id @default(uuid())
+  userId      String
+  categoryId  String
+  
+  percentage  Float?   // Persentase alokasi dari total gaji (misal: 15)
+  limitAmount Float?   // Atau nominal pasti jika tidak ingin persen (misal: 500000)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  categoryId String
-  category   BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([userId, categoryId, period]) // 1 Kategori hanya punya 1 budget per bulan
+  // 1 user hanya punya 1 pocket per kategori
+  @@unique([userId, categoryId]) 
+  @@schema("kainest")
 }
 
 // 3. Transaksi Harian
+
 model Transaction {
   id     String   @id @default(uuid())
   amount Int
@@ -194,9 +267,14 @@ model Transaction {
   category   BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+
+  @@index([userId, date])
+  @@index([categoryId])
+  @@schema("kainest")
 }
 
 // 4. AI Suggestion Logs (Menyimpan saran Groq)
+
 model AISuggestion {
   id              String  @id @default(uuid())
   type            String // 'DAILY_ADVISOR' | 'MONTHLY_EVAL' | 'REBALANCE'
@@ -207,27 +285,89 @@ model AISuggestion {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@schema("kainest")
 }
 
 model WaBotConfig {
-  id          String   @id @default(uuid())
-  
+  id             String   @id @default(uuid())
   // Field di code: userId, Kolom di DB: user_id
-  userId      String   @unique @map("user_id")
-  
+  userId         String   @unique @map("user_id")
   // Field di code: baseUrl, Kolom di DB: base_url
-  baseUrl     String   @map("base_url")
-  
+  baseUrl        String   @map("base_url")
   // Field di code: adminSecret, Kolom di DB: admin_secret
-  adminSecret String?  @map("admin_secret")
-  
+  adminSecret    String?  @map("admin_secret")
+  // Nomor WA Bot Dinamis
+  botPhoneNumber String?  @map("bot_phone_number")
   // Mapping timestamp juga penting
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relasi ke User (Pastikan model User Anda ada di schema ini juga)
   // Jika relasi ini error, Anda bisa menonaktifkannya dulu dengan menghapus baris di bawah ini
-  // user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("wa_bot_configs") // Nama tabel di DB
+  @@schema("kainest")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@schema("kainest")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@schema("kainest")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@schema("kainest")
+}
+
+// ==========================================
+// 🤖 WHATSAPP BOT SYSTEM
+// ==========================================
+
+model BotActiveGroup {
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  groupId   String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([groupId])
+  @@schema("kainest")
 }

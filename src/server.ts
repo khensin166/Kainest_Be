@@ -10,4 +10,5 @@ serve({
   port: PORT,
 })
 
+// console log
 console.log(`🚀 Server running at http://localhost:${PORT}`)

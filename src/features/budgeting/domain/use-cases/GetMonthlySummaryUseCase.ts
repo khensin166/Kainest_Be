@@ -1,4 +1,5 @@
 import { budgetRepository } from "../../data/BudgetRepository.js";
+import { pocketRepository } from "../../data/PocketRepository.js";
 
 export const getMonthlySummaryUseCase = async (userId: string) => {
   try {
@@ -30,23 +31,65 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
       `📅 Periode: ${startDate.toISOString()} s/d ${endDate.toISOString()}`
     );
 
-    // 2. Ambil Semua Budget User Bulan Ini
-    const budgets = await budgetRepository.findBudgetsByMonth(
-      userId,
-      startDate
-    );
+    // 2. Ambil History Bulanan
+    let history = await budgetRepository.findMonthlyHistory(userId, startDate);
+    const user = await budgetRepository.findUserById(userId);
+    const salary = user?.salary || 0;
 
-    // 🔥 CCTV 2: Cek Hasil Query Budget
-    console.log(`💰 Budget Ditemukan: ${budgets.length} item`);
-    if (budgets.length === 0) {
-      console.warn("⚠️ PERINGATAN: User ini tidak punya budget di bulan ini!");
-      // Cek database manual: SELECT * FROM "Budget" WHERE "userId" = '...'
-    } else {
-      // Print salah satu contoh budget untuk cek tanggalnya
-      console.log(
-        "   Contoh Budget Pertama:",
-        JSON.stringify(budgets[0], null, 2)
-      );
+    // 🔥 LAZY LOADING: Jika history bulan ini belum ada, kita buatkan otomatis 
+    // berdasarkan blueprint/Pocket yang ada. (Otomatis pindah bulan!)
+    if (!history && salary > 0) {
+      console.log(`🔄 [LAZY LOAD] Membuat history baru untuk bulan ${startDate.toISOString()}`);
+      
+      const pockets = await pocketRepository.findPocketsByUser(userId);
+      const categories = await budgetRepository.findAllCategories(userId);
+      
+      let totalBudgeted = 0;
+      let totalSaved = 0;
+      
+      const newPocketsSnapshot = pockets.map((p) => {
+        let amountLimit = p.limitAmount || 0;
+        if (p.percentage != null) {
+          amountLimit = Math.floor((p.percentage / 100) * salary);
+        }
+        
+        const catDetail = categories.find(c => c.id === p.categoryId);
+        const isSaving = catDetail?.name.toLowerCase().includes('tabungan') || catDetail?.name.toLowerCase().includes('saving');
+
+        totalBudgeted += amountLimit;
+        if (isSaving) {
+          totalSaved += amountLimit;
+        }
+
+        return {
+          categoryId: p.categoryId,
+          categoryName: catDetail?.name || "Unknown",
+          icon: catDetail?.icon || "💰",
+          limitAmount: amountLimit,
+        };
+      });
+
+      // Simpan history baru
+      history = await budgetRepository.upsertMonthlyHistory(userId, startDate, {
+        salarySnapshot: salary,
+        totalBudgeted: totalBudgeted,
+        totalSaved: totalSaved,
+        pocketsSnapshot: newPocketsSnapshot,
+        totalSpent: 0
+      });
+    }
+
+    let pocketsSnapshot: any[] = [];
+    if (history && history.pocketsSnapshot) {
+        if (typeof history.pocketsSnapshot === 'string') {
+            try {
+                pocketsSnapshot = JSON.parse(history.pocketsSnapshot);
+            } catch (e) {
+                pocketsSnapshot = [];
+            }
+        } else if (Array.isArray(history.pocketsSnapshot)) {
+            pocketsSnapshot = history.pocketsSnapshot;
+        }
     }
 
     // 3. Ambil Realisasi Pengeluaran (Group By Category)
@@ -57,19 +100,20 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
       endDate
     );
 
-    // 4. Gabungkan Data (Merge Budget + Expense)
-    const summary = budgets.map((budget) => {
+    // 4. Gabungkan Data (Merge Snapshot + Expense)
+    const summary = pocketsSnapshot.map((pocket) => {
       // Cari pengeluaran yang cocok dengan kategori ini
-      const expense = expenses.find((e) => e.categoryId === budget.categoryId);
+      const expense = expenses.find((e) => e.categoryId === pocket.categoryId);
       const spent = expense?._sum.amount || 0;
-      const remaining = budget.amount_limit - spent;
-      const percentage = Math.min((spent / budget.amount_limit) * 100, 100);
+      const amountLimit = pocket.limitAmount || 0;
+      const remaining = amountLimit - spent;
+      const percentage = amountLimit > 0 ? Math.min((spent / amountLimit) * 100, 100) : 0;
 
       return {
-        categoryId: budget.categoryId,
-        categoryName: budget.category.name,
-        icon: budget.category.icon,
-        limit: budget.amount_limit,
+        categoryId: pocket.categoryId,
+        categoryName: pocket.categoryName,
+        icon: pocket.icon,
+        limit: amountLimit,
         spent: spent,
         remaining: remaining,
         percentage_used: Math.round(percentage),
@@ -81,10 +125,12 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
     // 5. Hitung Total Keseluruhan
     const totalLimit = summary.reduce((acc, curr) => acc + curr.limit, 0);
     const totalSpent = summary.reduce((acc, curr) => acc + curr.spent, 0);
+    const unallocated = Math.max(0, salary - totalLimit); // Uang yang belum masuk ke kantong manapun
 
     return {
       success: true,
       data: {
+        salary: salary, // Penting untuk cek apakah user sudah input gaji!
         month: startDate.toLocaleString("default", {
           month: "long",
           year: "numeric",
@@ -93,10 +139,12 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
           limit: totalLimit,
           spent: totalSpent,
           remaining: totalLimit - totalSpent,
+          unallocated: unallocated, // Selisih gaji - total limit kantong
         },
         categories: summary,
       },
     };
+
   } catch (error) {
     console.error("Get Summary Error:", error);
     return {

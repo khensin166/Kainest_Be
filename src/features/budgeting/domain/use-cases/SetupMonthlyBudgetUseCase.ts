@@ -1,5 +1,5 @@
-// SetupMonthlyBudgetUseCase.ts
 import { budgetRepository } from "../../data/BudgetRepository.js";
+import { pocketRepository } from "../../data/PocketRepository.js";
 
 type SetupData = {
   userId: string;
@@ -10,95 +10,72 @@ type SetupData = {
 
 export const setupMonthlyBudgetUseCase = async (data: SetupData) => {
   try {
-    const { userId, salary, rentAmount, savingTargetPercent = 0.2 } = data;
+    const { userId, salary, savingTargetPercent = 0.2 } = data;
 
-    // 1. Tentukan Tanggal Periode (Awal Bulan Ini)
+    // 1. Simpan salary ke User
+    await budgetRepository.updateUserSalary(userId, salary);
+
     const now = new Date();
-    const period = new Date(now.getFullYear(), now.getMonth(), 1);
+    const period = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
-    // 2. Ambil Master Categories
-    // Asumsi: Kita sudah seed kategori standar di DB (Food, Transport, Rent, Entertainment, Savings)
-    const categories = await budgetRepository.findAllCategories();
+    let pocketsSnapshot: any[] = [];
+    let totalBudgeted = 0;
+    let totalSaved = 0;
 
-    // Helper cari ID kategori by name (Case insensitive match logic perlu disesuaikan dgn data seed)
-    const findCatId = (name: string) =>
-      categories.find((c) => c.name.toLowerCase().includes(name))?.id;
+    // 2. Buat otomatis kantong Tabungan jika ada
+    if (savingTargetPercent > 0) {
+      const categories = await budgetRepository.findAllCategories(userId);
+      const tabunganCategory = categories.find((c) => 
+        c.name.toLowerCase().includes("tabungan") || c.name.toLowerCase().includes("saving")
+      );
 
-    // 3. RULE ENGINE LOGIC (Kenin Blueprint) 📐
+      if (tabunganCategory) {
+        // Simpan sebagai template kantong permanen
+        await pocketRepository.upsertPocket(userId, tabunganCategory.id, {
+          percentage: savingTargetPercent * 100
+        });
 
-    // A. Fixed Costs (Rent/Kos)
-    const rentBudget = rentAmount;
+        const amountLimit = Math.floor(salary * savingTargetPercent);
+        totalBudgeted += amountLimit;
+        totalSaved += amountLimit;
 
-    // B. Food (Rule: 45k x 30 hari = 1.35jt, tapi max 25% gaji)
-    const defaultFood = 45000 * 30;
-    const maxFood = salary * 0.25;
-    const foodBudget = Math.min(defaultFood, maxFood);
-
-    // C. Transport (Default 300k atau 5% gaji)
-    const transportBudget = 300000;
-
-    // D. Savings (20% Gaji)
-    const savingsBudget = salary * savingTargetPercent;
-
-    // E. Entertainment / Others (Sisa Gaji)
-    const basicNeeds =
-      rentBudget + foodBudget + transportBudget + savingsBudget;
-    let entertainmentBudget = salary - basicNeeds;
-
-    if (entertainmentBudget < 0) {
-      // Jika gaji ngepas, kurangi savings/entertainment
-      entertainmentBudget = 0;
+        pocketsSnapshot.push({
+          categoryId: tabunganCategory.id,
+          categoryName: tabunganCategory.name,
+          icon: tabunganCategory.icon || "💰",
+          limitAmount: amountLimit
+        });
+      }
     }
 
-    // 4. Simpan ke Database (Upsert)
-    const idMakan = findCatId("makan") || findCatId("food");
-    const idTrans = findCatId("transport");
-    const idKos = findCatId("kos") || findCatId("rent");
-    const idHiburan = findCatId("hiburan") || findCatId("entertainment");
-    const idTabungan = findCatId("tabungan") || findCatId("saving");
-
-    const promises = [];
-
-    if (idMakan)
-      promises.push(
-        budgetRepository.upsertBudget(userId, idMakan, period, foodBudget)
-      );
-    if (idTrans)
-      promises.push(
-        budgetRepository.upsertBudget(userId, idTrans, period, transportBudget)
-      );
-    if (idKos)
-      promises.push(
-        budgetRepository.upsertBudget(userId, idKos, period, rentBudget)
-      );
-    if (idHiburan)
-      promises.push(
-        budgetRepository.upsertBudget(
-          userId,
-          idHiburan,
-          period,
-          entertainmentBudget
-        )
-      );
-    // Tabungan biasanya bukan expense limit, tapi goal. Bisa disimpan sbg budget jg kalau mau ditrack.
-
-    await Promise.all(promises);
+    // Ambil histori lama jika ada (untuk tidak mereset totalSpent atau kantong lain jika bukan setup baru)
+    const existingHistory = await budgetRepository.findMonthlyHistory(userId, period);
+    
+    // Jika sudah ada kantong lain di history, biarkan saja (jangan dioverwrite kecuali tabungan)
+    if (existingHistory && Array.isArray(existingHistory.pocketsSnapshot)) {
+        // Abaikan jika ini setup ulang yang kompleks, biarkan BulkSetup yang menangani kompleksitas
+        // Ini hanya untuk initial setup
+    } else {
+        await budgetRepository.upsertMonthlyHistory(userId, period, {
+            salarySnapshot: salary,
+            totalBudgeted: totalBudgeted,
+            totalSaved: existingHistory?.totalSaved || 0,
+            pocketsSnapshot: pocketsSnapshot,
+            totalSpent: existingHistory?.totalSpent || 0
+        });
+        
+        await budgetRepository.syncMonthlyHistory(userId, period);
+    }
 
     return {
       success: true,
-      message: "Budget baseline created successfully",
+      message: "Salary and savings setup successfully.",
       data: {
-        total_allocated: basicNeeds + entertainmentBudget,
-        details: {
-          food: foodBudget,
-          rent: rentBudget,
-          transport: transportBudget,
-          entertainment: entertainmentBudget,
-        },
+        salary
       },
     };
   } catch (error) {
     console.error("Setup Budget Error:", error);
-    return { success: false, status: 500, message: "Failed to setup budget" };
+    return { success: false, status: 500, message: "Failed to setup salary" };
   }
 };

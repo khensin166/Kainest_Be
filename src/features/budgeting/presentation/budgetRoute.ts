@@ -4,6 +4,7 @@ import {
   createTransactionController,
   getBudgetStatusController,
   getCategoriesController,
+  createCustomCategoryController,
   setupBudgetController,
   getSummaryController,
   getAiAdviceController,
@@ -14,6 +15,14 @@ import {
   getTransactionDetailController,
   updateTransactionController,
   deleteTransactionController,
+  // Pocket Controllers
+  getPocketsController,
+  upsertPocketController,
+  deletePocketController,
+  bulkSetupPocketsController,
+  updateKeywordsController,
+  classifyTransactionController,
+  getMonthlyHistoryController,
 } from "../services/budgetController.js";
 
 export const budgetRoute = new Hono();
@@ -23,6 +32,9 @@ budgetRoute.use("*", authMiddleware);
 
 // 1. Ambil daftar kategori (untuk dropdown)
 budgetRoute.get("/categories", getCategoriesController);
+
+// Buat kategori kustom user
+budgetRoute.post("/categories", createCustomCategoryController);
 
 // 2. Input Transaksi Baru
 budgetRoute.post("/transactions", createTransactionController);
@@ -62,3 +74,32 @@ budgetRoute.post("/evaluate", evaluateBudgetController);
 
 // Ambil Data Tren Harian (GET) -> Untuk Grafik Dashboard
 budgetRoute.get("/trend", getTrendController);
+
+// ==========================================
+// 💰 POCKET (KANTONG) ROUTES
+// ==========================================
+
+// GET: Ambil daftar kantong user
+budgetRoute.get("/pockets", getPocketsController);
+
+// PUT: Buat atau update satu kantong
+budgetRoute.put("/pockets", upsertPocketController);
+
+// DELETE: Hapus kantong berdasarkan categoryId
+budgetRoute.delete("/pockets/:categoryId", deletePocketController);
+
+// POST: Bulk setup kantong (untuk onboarding)
+budgetRoute.post("/pockets/setup", bulkSetupPocketsController);
+
+// PATCH: Update keywords pada kategori tertentu
+budgetRoute.patch("/categories/:categoryId/keywords", updateKeywordsController);
+
+// POST: Klasifikasi teks pengeluaran via AI (Grok)
+budgetRoute.post("/classify", classifyTransactionController);
+
+// ==========================================
+// 📅 MONTHLY HISTORY ROUTES
+// ==========================================
+
+// GET: Riwayat keuangan bulanan user
+budgetRoute.get("/history", getMonthlyHistoryController);

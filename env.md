@@ -30,4 +30,4 @@ graph LR
 1. **Biaya Rp 0:** Sangat minim risiko finansial untuk validasi ide (MVP).
 2. **Skalabilitas Mudah:** Jika trafik naik, semua layanan di atas memiliki tier berbayar yang mudah di-upgrade.
 3. **Performa Tinggi:** Cloudflare Workers menjalankan backend di Edge location yang dekat dengan user. Hono.js sangat optimal di environment tersebut.
-4. **Developer Experience (DX):** Prisma + TypeScript + Hono memberikan pengalaman coding yang aman dan terstruktur.
+4. **Developer Experience (DX):** Prisma + TypeScript + Hono memberikan pengalaman coding  yang aman dan terstruktur.
