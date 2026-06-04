@@ -60,11 +60,11 @@ model User {
   couples1     Couple[]          @relation("User1Couple")
   couples2     Couple[]          @relation("User2Couple")
   notes        Note[]            @relation("UserNotes")
-  logs         NotificationLog[]
+  notifications AppNotification[]
+  feedbacks     UserFeedback[]
   photos       Photo[]
   todos        Todo[]            @relation("UserTodos")
   profile      UserProfile?
-  shifts       UserShift[]
 
   // --- NEW: BUDGETING FIELDS ---
   salary Int @default(0) // Gaji bulanan
@@ -92,40 +92,32 @@ model User {
   @@schema("kainest")
 }
 
-model UserShift {
-  userId     String
-  date       DateTime @db.Date
-  shift_type String
-  createdAt  DateTime @default(now())
-  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  user       User     @relation(fields: [userId], references: [id])
 
-  @@unique([userId, date])
+
+model AppNotification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String   @db.Text
+  type      String   @default("SYSTEM") // 'SYSTEM' | 'ALERT' | 'AI_INSIGHT'
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
   @@schema("kainest")
 }
 
-model ShiftActivity {
-  id            String            @id @default(uuid())
-  shift_type    String
-  activity_name String
-  time_start    String
-  reminder_time String
-  note          String?
-  logs          NotificationLog[]
+model UserFeedback {
+  id        String   @id @default(uuid())
+  userId    String
+  message   String   @db.Text
+  rating    Int?     // 1-5, opsional
+  isVisible Boolean  @default(true) // Admin bisa hide
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([shift_type, reminder_time])
-  @@schema("kainest")
-}
-
-model NotificationLog {
-  id         String        @id @default(uuid())
-  userId     String
-  activityId String
-  sent_at    DateTime      @default(now())
-  activity   ShiftActivity @relation(fields: [activityId], references: [id])
-  user       User          @relation(fields: [userId], references: [id])
-
-  @@unique([userId, activityId, sent_at])
+  @@index([isVisible])
   @@schema("kainest")
 }
 
