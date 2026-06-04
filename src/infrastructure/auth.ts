@@ -18,6 +18,20 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
+  user: {
+    additionalFields: {
+      whatsappJid: {
+        type: "string",
+        required: false,
+        fieldName: "whatsappJid",
+      },
+      phone_number: {
+        type: "string",
+        required: false,
+        fieldName: "phone_number",
+      },
+    },
+  },
   account: {
     accountLinking: {
       enabled: true,

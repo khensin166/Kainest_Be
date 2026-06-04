@@ -87,7 +87,7 @@ model User {
   banned      Boolean? @default(false)
   banReason   String?
   banExpires  DateTime?
-  permissions String[] @default([]) // Array of allowed modules (e.g. ["budgeting", "notes", "todos", "wabot"])
+  permissions String[] @default(["budgeting"]) // Array of allowed modules (e.g. ["budgeting", "notes", "todos", "wabot"])
 
   @@schema("kainest")
 }
