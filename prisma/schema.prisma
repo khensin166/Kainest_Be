@@ -60,11 +60,13 @@ model User {
   couples1     Couple[]          @relation("User1Couple")
   couples2     Couple[]          @relation("User2Couple")
   notes        Note[]            @relation("UserNotes")
+  logs         NotificationLog[]
   notifications AppNotification[]
   feedbacks     UserFeedback[]
   photos       Photo[]
   todos        Todo[]            @relation("UserTodos")
   profile      UserProfile?
+  shifts       UserShift[]
 
   // --- NEW: BUDGETING FIELDS ---
   salary Int @default(0) // Gaji bulanan
@@ -92,7 +94,42 @@ model User {
   @@schema("kainest")
 }
 
+model UserShift {
+  userId     String
+  date       DateTime @db.Date
+  shift_type String
+  createdAt  DateTime @default(now())
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user       User     @relation(fields: [userId], references: [id])
 
+  @@unique([userId, date])
+  @@schema("kainest")
+}
+
+model ShiftActivity {
+  id            String            @id @default(uuid())
+  shift_type    String
+  activity_name String
+  time_start    String
+  reminder_time String
+  note          String?
+  logs          NotificationLog[]
+
+  @@unique([shift_type, reminder_time])
+  @@schema("kainest")
+}
+
+model NotificationLog {
+  id         String        @id @default(uuid())
+  userId     String
+  activityId String
+  sent_at    DateTime      @default(now())
+  activity   ShiftActivity @relation(fields: [activityId], references: [id])
+  user       User          @relation(fields: [userId], references: [id])
+
+  @@unique([userId, activityId, sent_at])
+  @@schema("kainest")
+}
 
 model AppNotification {
   id        String   @id @default(uuid())
