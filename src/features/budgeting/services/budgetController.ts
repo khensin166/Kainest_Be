@@ -84,7 +84,6 @@ export const setupBudgetController = async (c: Context) => {
     userId,
     salary: body.salary,
     rentAmount: body.rent,
-    savingTargetPercent: body.savingPercent,
   });
 
   if (!result.success) c.status(result.status as any);

@@ -94,7 +94,12 @@ Template kantong budget permanen milik user per kategori. Ini adalah **sumber ke
 - `@unique([userId, categoryId])` — Satu user hanya boleh punya satu kantong per kategori.
 
 #### `MonthlyFinancialHistory` 🆕
-Snapshot riwayat keuangan per bulan per user. **Tabel Budget lama sudah dihapus dan digantikan sepenuhnya oleh tabel ini.**
+Snapshot riwayat keuangan per bulan per user.  - Variabel lingkungan `RESEND_FROM_EMAIL` sudah disiapkan di `.env`.
+
+## Update 04 Juni 2026
+- **Frontend**: Dashboard dirombak dengan memfokuskan layout pada ringkasan keuangan dan Aktivitas Terbaru di sisi utama. `System Updates` dan `User Feedback` ditarik dinamis dari API. `DropdownNotifications` kini interaktif (terhubung ke backend). Sidebar `filteredMenu` bereaksi otomatis saat login, dan menu `Vault Rahasia` sudah dilindungi permission.
+- **Backend**: Skema `NotificationLog` dan `ShiftActivity` lama dihilangkan, digantikan dengan `AppNotification` & `UserFeedback` serta `SystemUpdate`. Endpoint API notifikasi, feedback, dan changelog (termasuk fitur *Sync dari GitHub* dengan deteksi keyword `[BLAST]`) telah aktif di Hono.
+- **Bot WhatsApp**: Alur registrasi `!link` diperketat (tidak bisa lagi aktivasi personal sebelum membuat grup). Bot kini juga merespons transaksi berhasil dengan mengirimkan stiker animasi *kicaw*. digantikan sepenuhnya oleh tabel ini.**
 - `period: DateTime (@db.Date)` — Tanggal awal bulan (misal: `2026-05-01`).
 - `salarySnapshot: Int` — Gaji user pada saat snapshot dibuat.
 - `totalBudgeted: Int` — Total nominal yang dialokasikan ke semua kantong bulan tersebut.
@@ -264,6 +269,8 @@ Middleware global yang di-mount di `app.ts` **setelah CORS dan sebelum semua rou
 | 14 | **Preservasi Data Riwayat Bulanan Saat Setup Pocket/Budget** | Mengubah `BulkSetupPocketsUseCase.ts` dan `SetupMonthlyBudgetUseCase.ts` agar tetap mempertahankan nilai `totalSaved` dan `totalSpent` ketika memperbarui kantong, dilanjutkan dengan memanggil `syncMonthlyHistory` agar data terhitung ulang dengan aman. |
 | 15 | **Script Migrasi & Sinkronisasi Backfill (`force-sync-pockets.ts`)** | Membuat script utility `force-sync-pockets.ts` untuk memigrasi dan melakukan sinkronisasi data riwayat keuangan bulanan historis (November 2025 s.d. April 2026) dengan template layout pocket saat ini agar data rencana, aktual, dan tabungan sinkron. |
 | 16 | **Migrasi Skema Bot WhatsApp (`BotActiveGroup`)** | Menambahkan model `BotActiveGroup` ke `schema.prisma` dan menyinkronkan database Supabase menggunakan `prisma db push` untuk menyimpan data grup WA aktif bagi integrasi WhatsApp Bot komersial. |
+| 17 | **Restrukturisasi Notifikasi & Feedback** | Skema `NotificationLog` dan `ShiftActivity` yang usang diganti dengan `AppNotification` dan `UserFeedback`. Endpoint API baru di `/notifications` dan `/feedbacks` ditambahkan untuk mendukung interaksi real-time di Frontend. |
+| 18 | **Fitur GitHub Sync & Changelog API** | Endpoint `POST /system-updates/sync` dan `GET /system-updates` dibuat untuk mengambil data rilis GitHub secara dinamis. Mendukung tag `[BLAST]` untuk menembak *AppNotification* secara otomatis jika ada update penting. |
 
 ---
 
