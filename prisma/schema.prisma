@@ -158,6 +158,20 @@ model UserFeedback {
   @@schema("kainest")
 }
 
+model SystemUpdate {
+  id          String   @id @default(uuid())
+  version     String   @unique // e.g. "v1.3.0"
+  title       String
+  description String   @db.Text
+  date        DateTime // Tanggal rilis dari GitHub
+  url         String?  // Link ke GitHub Release
+  badge       String?  @default("Baru")
+  createdAt   DateTime @default(now())
+
+  @@index([date(sort: Desc)])
+  @@schema("kainest")
+}
+
 model Todo {
   id           String   @id @default(uuid())
   title        String
