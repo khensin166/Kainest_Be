@@ -11,8 +11,8 @@ type ProcessBotTransactionInput = {
   timestamp?: number;
 };
 
-// Pesan sapaan interaktif bot
-const HALO_MESSAGE = `Kamu siapanyakkkk? 👀
+// Pesan onboarding untuk user baru yang mengirim pesan pertama kali di personal
+const ONBOARDING_MESSAGE = `Kamu siapanyakkkk? 👀
 
 Kenalan dulu dong! Biar kita bisa mulai catat keuangan bareng, ikutin langkah ini ya:
 
@@ -22,13 +22,12 @@ Kenalan dulu dong! Biar kita bisa mulai catat keuangan bareng, ikutin langkah in
 4️⃣ Balas pesan ini dengan format:
    \`!link KODE_UNIK_KAMU\`
 
-5️⃣ Jika sudah sukses tertaut, buat grup baru dan masukkan aku (bot) ke dalamnya.
-   🤖 *Android*: Di dalam chat ini, ketuk ikon titik tiga (⋮) ➡️ pilih *New Group*.
+5️⃣ Setelah sukses tertaut, buat grup baru dan masukkan aku (bot) ke dalamnya.
+   🤖 *Android*: Di chat ini, ketuk ikon titik tiga (⋮) ➡️ pilih *New Group*.
    🍎 *iPhone*: Ketuk nama profil di atas ➡️ pilih *Create Group with...*
 
-6️⃣ Di grup tersebut, ketik:
+6️⃣ Di grup tersebut, bot akan otomatis menyapa. Balas dengan ketik:
    \`!aktifkan-kainest\`
-   _(Agar grup tersebut resmi terdaftar sebagai tempat bertransaksi)_
 
 7️⃣ Selesai! Kamu bisa langsung catat pengeluaran 🎉
    Contoh: \`Makan siang 20k\` atau \`Bensin 50rb\``;
@@ -42,24 +41,15 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   const textMsg = data.text.trim();
   const lowerText = textMsg.toLowerCase();
 
-  // 2. Intercept sapaan "Halo" (tanpa perlu grup aktif / akun tertaut)
-  const greetings = ["halo", "hai", "hallo", "hi", "hello", "p", "halo!", "hai!", "hallo!"];
-  if (greetings.includes(lowerText)) {
-    return {
-      success: true,
-      data: {
-        message: HALO_MESSAGE,
-        stickerUrl: "https://cdn2.cdnstep.com/2AMUhE1EYrNGIaXmRrWU/cover-2.thumb256.webp",
-      },
-    };
-  }
+  // 2. Intercept perintah !link (prioritas utama, bisa dari personal maupun grup)
+  // (lanjut ke blok !link di bawah)
 
   // 3. Pembersihan Sender
   // Contoh sender: 62812345678@s.whatsapp.net atau 172662131298437@lid
   const rawSender = data.sender;
   let cleanSender = rawSender.replace("@s.whatsapp.net", "").replace("@c.us", "").replace("@lid", "");
 
-  // 4. Intercept Perintah !link (tanpa perlu grup aktif)
+  // 3. Intercept Perintah !link (tanpa perlu grup aktif)
   if (lowerText.startsWith("!link ")) {
     const code = textMsg.split(" ")[1];
     if (!code) {
@@ -71,14 +61,14 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
       return { success: false, status: 404, message: "❌ Kode tidak valid atau akun tidak ditemukan. Coba salin ulang kode dari web Kainest ya!" };
     }
 
-    // Simpan raw sender (dengan @lid jika ada) untuk identifikasi akurat
-    const jidToSave = rawSender.includes("@lid") ? cleanSender : cleanSender;
+    const jidToSave = rawSender.replace("@s.whatsapp.net", "").replace("@c.us", "").replace("@lid", "");
     await botTransactionRepository.updateWhatsappJid(userToLink.id, jidToSave);
 
     return {
       success: true,
       data: {
-        message: `✅ Yeay! Akun Kainest *${userToLink.name || userToLink.email}* kini berhasil terhubung! 🎉\n\nSelanjutnya, buat grup baru dan masukkan aku ke sana, lalu ketik *!aktifkan-kainest* di grupnya ya!`,
+        message: `✅ Yeay! Akun Kainest *${userToLink.name || userToLink.email}* kini berhasil terhubung! 🎉\n\nSelanjutnya:\n1. Buat grup baru dan masukkan aku ke sana.\n2. Bot akan langsung menyapa! Balas dengan ketik *!aktifkan-kainest* di grupnya.`,
+        sendKicawSticker: true,
       },
     };
   }
@@ -119,13 +109,24 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     }
   }
 
-  // 7. Identifikasi User
+  // 7. Universal Fallback: Jika dari chat PERSONAL dan nomor belum terdaftar
   const user = await botTransactionRepository.getUserByPhoneNumber(cleanSender);
   if (!user) {
+    // Jika dari grup, beri pesan pendek
+    if (data.groupId) {
+      return {
+        success: false,
+        status: 404,
+        message: `❓ Nomor kamu belum tertaut ke akun Kainest. Chat personal bot dan ketik *!link KODE_UNIK_KAMU* terlebih dahulu ya!`,
+      };
+    }
+    // Jika dari personal (nomor belum terdaftar) -> kirim ONBOARDING
     return {
-      success: false,
-      status: 404,
-      message: `❓ Nomor ini belum terdaftar di Kainest.\n\nKirim *halo* ke chat personal bot untuk melihat cara mendaftarkan diri ya!`,
+      success: true,
+      data: {
+        message: ONBOARDING_MESSAGE,
+        sendKicawSticker: true,
+      },
     };
   }
 
