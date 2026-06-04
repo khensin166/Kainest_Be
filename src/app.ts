@@ -9,6 +9,9 @@ import { budgetRoute } from "./features/budgeting/presentation/budgetRoute.js";
 import { wabotRoute } from "./features/wabot/presentation/wabotRoutes.js";
 import { uploadRoute } from "./features/upload/presentation/uploadRoute.js";
 import adminRoute from "./features/admin/presentation/admin.route.js";
+import { notificationRoute } from "./features/notification/presentation/notificationRoute.js";
+import { feedbackRoute } from "./features/feedback/presentation/feedbackRoute.js";
+import { systemUpdateRoute } from "./features/systemUpdate/presentation/systemUpdateRoute.js";
 import { cors } from 'hono/cors'
 import { loggingMiddleware } from './infrastructure/middlewares/LoggingMiddleware.js'
 
@@ -70,6 +73,9 @@ app.route("/budget", budgetRoute)
 app.route("/wabot", wabotRoute)
 app.route("/upload", uploadRoute)
 app.route("/admin", adminRoute)
+app.route("/notifications", notificationRoute)
+app.route("/feedbacks", feedbackRoute)
+app.route("/system-updates", systemUpdateRoute)
 
 app.get('/', (c) => c.text('Hello from Kainest Backend! 🚀'))
 

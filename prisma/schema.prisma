@@ -61,6 +61,8 @@ model User {
   couples2     Couple[]          @relation("User2Couple")
   notes        Note[]            @relation("UserNotes")
   logs         NotificationLog[]
+  notifications AppNotification[]
+  feedbacks     UserFeedback[]
   photos       Photo[]
   todos        Todo[]            @relation("UserTodos")
   profile      UserProfile?
@@ -87,7 +89,7 @@ model User {
   banned      Boolean? @default(false)
   banReason   String?
   banExpires  DateTime?
-  permissions String[] @default([]) // Array of allowed modules (e.g. ["budgeting", "notes", "todos", "wabot"])
+  permissions String[] @default(["budgeting"]) // Array of allowed modules (e.g. ["budgeting", "notes", "todos", "wabot"])
 
   @@schema("kainest")
 }
@@ -126,6 +128,47 @@ model NotificationLog {
   user       User          @relation(fields: [userId], references: [id])
 
   @@unique([userId, activityId, sent_at])
+  @@schema("kainest")
+}
+
+model AppNotification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String   @db.Text
+  type      String   @default("SYSTEM") // 'SYSTEM' | 'ALERT' | 'AI_INSIGHT'
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@schema("kainest")
+}
+
+model UserFeedback {
+  id        String   @id @default(uuid())
+  userId    String
+  message   String   @db.Text
+  rating    Int?     // 1-5, opsional
+  isVisible Boolean  @default(true) // Admin bisa hide
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([isVisible])
+  @@schema("kainest")
+}
+
+model SystemUpdate {
+  id          String   @id @default(uuid())
+  version     String   @unique // e.g. "v1.3.0"
+  title       String
+  description String   @db.Text
+  date        DateTime // Tanggal rilis dari GitHub
+  url         String?  // Link ke GitHub Release
+  badge       String?  @default("Baru")
+  createdAt   DateTime @default(now())
+
+  @@index([date(sort: Desc)])
   @@schema("kainest")
 }
 
