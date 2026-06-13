@@ -414,3 +414,35 @@ model BotActiveGroup {
   @@index([groupId])
   @@schema("kainest")
 }
+
+model BackupTargets {
+  id         String   @id @default(uuid())
+  session_id String
+  chat_id    String
+  name       String?
+  createdAt  DateTime @default(now())
+
+  ChatLogs ChatLogs[]
+
+  @@unique([session_id, chat_id])
+  @@index([chat_id])
+  @@schema("kainest")
+}
+
+model ChatLogs {
+  id              String        @id @default(uuid())
+  session_id      String
+  chat_id         String
+  sender          String
+  message_content String        @db.Text
+  message_type    String        @default("conversation")
+  timestamp       DateTime
+  raw_data        Json?
+  createdAt       DateTime      @default(now())
+
+  BackupTarget BackupTargets @relation(fields: [chat_id, session_id], references: [chat_id, session_id])
+
+  @@index([chat_id, session_id])
+  @@index([timestamp(sort: Desc)])
+  @@schema("kainest")
+}
