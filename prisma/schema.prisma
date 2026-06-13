@@ -446,3 +446,13 @@ model ChatLogs {
   @@index([timestamp(sort: Desc)])
   @@schema("kainest")
 }
+
+model ApiKeys {
+  id         String   @id @default(uuid())
+  name       String
+  key        String   @unique
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+
+  @@schema("kainest")
+}
