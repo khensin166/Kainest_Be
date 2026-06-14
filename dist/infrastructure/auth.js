@@ -2,7 +2,10 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { admin, bearer } from "better-auth/plugins";
 import { prisma } from "./database/prisma.js";
+import { Resend } from "resend";
+import { getResetPasswordEmailHtml } from "./email/templates/resetPasswordTemplate.js";
 const isLocal = process.env.NODE_ENV !== "production" && (!process.env.BETTER_AUTH_URL || process.env.BETTER_AUTH_URL.includes("localhost"));
+const resend = new Resend(process.env.RESEND_API_KEY);
 export const auth = betterAuth({
     trustedOrigins: [
         "http://localhost:5173",
@@ -13,6 +16,20 @@ export const auth = betterAuth({
     database: prismaAdapter(prisma, {
         provider: "postgresql",
     }),
+    user: {
+        additionalFields: {
+            whatsappJid: {
+                type: "string",
+                required: false,
+                fieldName: "whatsappJid",
+            },
+            phone_number: {
+                type: "string",
+                required: false,
+                fieldName: "phone_number",
+            },
+        },
+    },
     account: {
         accountLinking: {
             enabled: true,
@@ -22,6 +39,22 @@ export const auth = betterAuth({
     basePath: "/auth",
     emailAndPassword: {
         enabled: true,
+        async sendResetPassword({ user, url, token }, request) {
+            try {
+                const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+                const htmlBody = getResetPasswordEmailHtml(user.name || 'Pengguna Kainest', url);
+                const data = await resend.emails.send({
+                    from: fromEmail,
+                    to: user.email,
+                    subject: "Reset Kata Sandi Kainest",
+                    html: htmlBody,
+                });
+                console.log("[Auth] Email reset kata sandi terkirim:", data);
+            }
+            catch (error) {
+                console.error("[Auth] Gagal mengirim email reset kata sandi:", error);
+            }
+        },
     },
     socialProviders: {
         google: {

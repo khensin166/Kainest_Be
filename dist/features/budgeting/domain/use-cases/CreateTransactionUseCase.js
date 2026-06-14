@@ -1,4 +1,5 @@
 import { transactionRepository } from "../../data/TransactionRepository.js";
+import { budgetRepository } from "../../data/BudgetRepository.js";
 export const createTransactionUseCase = async (data) => {
     if (!data.amount || data.amount <= 0) {
         return { success: false, status: 400, message: "Amount must be positive" };
@@ -14,6 +15,8 @@ export const createTransactionUseCase = async (data) => {
             note: data.note,
             date: txDate,
         });
+        // Write-Time Sync untuk riwayat bulanan
+        await budgetRepository.syncMonthlyHistory(data.userId, txDate);
         return { success: true, data: newTx };
     }
     catch (error) {

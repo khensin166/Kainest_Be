@@ -25,4 +25,19 @@ export const waBotConfigRepository = {
             where: { userId },
         });
     },
+    /**
+     * Memperbarui nomor HP bot (Untuk webhook bailey)
+     */
+    async updateBotPhoneNumber(userId, botPhoneNumber) {
+        return prisma.waBotConfig.update({
+            where: { userId },
+            data: { botPhoneNumber },
+        });
+    },
+    /**
+     * Mengambil konfigurasi bot pertama (Asumsi bot SaaS tersentral)
+     */
+    async getFirstConfig() {
+        return prisma.waBotConfig.findFirst();
+    },
 };

@@ -1,4 +1,5 @@
 import { transactionRepository } from "../../data/TransactionRepository.js";
+import { budgetRepository } from "../../data/BudgetRepository.js";
 export const deleteTransactionUseCase = async (transactionId, userId) => {
     try {
         // 1. Cek kepemilikan sebelum hapus
@@ -8,6 +9,8 @@ export const deleteTransactionUseCase = async (transactionId, userId) => {
         }
         // 2. Hapus dari database
         await transactionRepository.deleteTransaction(transactionId);
+        // 3. Write-Time Sync untuk riwayat bulanan
+        await budgetRepository.syncMonthlyHistory(userId, existingTransaction.date);
         return {
             success: true,
             message: "Transaksi berhasil dihapus.",

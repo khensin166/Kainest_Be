@@ -1,0 +1,58 @@
+import { prisma } from "../../../infrastructure/database/prisma.js";
+export const botTransactionRepository = {
+    /**
+     * Cek apakah grup terdaftar di BotActiveGroup
+     */
+    async getActiveGroup(groupId) {
+        return prisma.botActiveGroup.findUnique({
+            where: { groupId },
+        });
+    },
+    /**
+     * Cari user berdasarkan nomor telepon (exact match atau contains)
+     */
+    async getUserByPhoneNumber(phoneNumber) {
+        // Kita coba exact match dulu ke whatsappJid atau phone_number
+        let user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { whatsappJid: phoneNumber },
+                    { phone_number: phoneNumber }
+                ]
+            },
+        });
+        if (!user) {
+            // Coba cari dengan LIKE pattern (contoh: nomor di db '08123', dari bot '628123')
+            // Untuk sederhananya kita cari user yang phone_number-nya diakhiri dengan nomor belakang sender
+            // Asumsi minimal 9 digit yang dicocokkan (menghilangkan kode negara)
+            const phoneTail = phoneNumber.length > 9 ? phoneNumber.slice(-9) : phoneNumber;
+            user = await prisma.user.findFirst({
+                where: {
+                    phone_number: {
+                        endsWith: phoneTail,
+                    },
+                },
+            });
+        }
+        return user;
+    },
+    /**
+     * Cari user berdasarkan invitation code
+     */
+    async getUserByInvitationCode(code) {
+        const profile = await prisma.userProfile.findUnique({
+            where: { invitationCode: code },
+            include: { user: true }
+        });
+        return profile?.user || null;
+    },
+    /**
+     * Update kolom whatsappJid di tabel User
+     */
+    async updateWhatsappJid(userId, jid) {
+        return prisma.user.update({
+            where: { id: userId },
+            data: { whatsappJid: jid },
+        });
+    },
+};

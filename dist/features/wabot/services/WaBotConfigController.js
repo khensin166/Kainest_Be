@@ -21,3 +21,36 @@ export const getConfigController = async (c) => {
     }
     return c.json(result);
 };
+export const saveBotInfoController = async (c) => {
+    try {
+        const body = await c.req.json();
+        if (!body.botPhoneNumber) {
+            return c.json({ success: false, message: "Missing botPhoneNumber" }, 400);
+        }
+        const m = await import("../data/WaBotConfigRepository.js");
+        const firstConfig = await m.waBotConfigRepository.getFirstConfig();
+        if (!firstConfig) {
+            return c.json({ success: false, message: "WaBotConfig is empty. Please save config first." }, 400);
+        }
+        const updated = await m.waBotConfigRepository.updateBotPhoneNumber(firstConfig.userId, body.botPhoneNumber);
+        return c.json({ success: true, data: updated });
+    }
+    catch (error) {
+        console.error("saveBotInfoController Error:", error);
+        return c.json({ success: false, message: "Internal server error" }, 500);
+    }
+};
+export const getBotInfoController = async (c) => {
+    try {
+        const m = await import("../data/WaBotConfigRepository.js");
+        const firstConfig = await m.waBotConfigRepository.getFirstConfig();
+        if (!firstConfig || !firstConfig.botPhoneNumber) {
+            return c.json({ success: false, message: "Bot phone number not found" }, 404);
+        }
+        return c.json({ success: true, botPhoneNumber: firstConfig.botPhoneNumber });
+    }
+    catch (error) {
+        console.error("getBotInfoController Error:", error);
+        return c.json({ success: false, message: "Internal server error" }, 500);
+    }
+};
