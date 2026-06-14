@@ -29,6 +29,7 @@ export const createTransactionController = async (c: Context) => {
     categoryId: body.categoryId,
     note: body.note,
     date: body.date,
+    type: body.type,
   });
 
   if (!result.success) {
