@@ -11,25 +11,29 @@ const jsonFormat = winston.format.combine(
 // Tentukan direktori log
 const logDir = path.join(process.cwd(), 'logs');
 
-// Transport untuk Daily Rotate File
-const fileTransport = new winston.transports.DailyRotateFile({
-  filename: path.join(logDir, 'kainest-be-%DATE%.log'),
-  datePattern: 'YYYYMMDD',
-  zippedArchive: false,
-  maxSize: '20m',
-  maxFiles: '5d', // Otomatis hapus setelah 5 hari
-  level: 'info',
-});
+const transportsList: winston.transport[] = [
+  new winston.transports.Console({
+    format: jsonFormat,
+  })
+];
+
+// Jangan gunakan file transport di Vercel Serverless Functions karena sistem file read-only
+if (!process.env.VERCEL) {
+  transportsList.push(
+    new winston.transports.DailyRotateFile({
+      filename: path.join(logDir, 'kainest-be-%DATE%.log'),
+      datePattern: 'YYYYMMDD',
+      zippedArchive: false,
+      maxSize: '20m',
+      maxFiles: '5d',
+      level: 'info',
+    })
+  );
+}
 
 // Logger Instance
 export const logger = winston.createLogger({
   level: 'info',
   format: jsonFormat,
-  transports: [
-    fileTransport,
-    // (Opsional) Tambahkan ke Console jika ingin lihat di terminal VPS juga:
-    new winston.transports.Console({
-      format: jsonFormat,
-    })
-  ],
+  transports: transportsList,
 });
