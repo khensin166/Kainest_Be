@@ -1,11 +1,13 @@
 import { transactionRepository } from "../../data/TransactionRepository.js";
 import { budgetRepository } from "../../data/BudgetRepository.js";
+import { TransactionType } from "@prisma/client";
 
 interface UpdateInput {
   amount?: number;
   categoryId?: string;
   note?: string;
   date?: string; // Format YYYY-MM-DD
+  type?: "INCOME" | "EXPENSE"; // 🆕 Mendukung perubahan tipe transaksi
 }
 
 export const updateTransactionUseCase = async (transactionId: string, userId: string, input: UpdateInput) => {
@@ -26,16 +28,21 @@ export const updateTransactionUseCase = async (transactionId: string, userId: st
        updateData.date = new Date(`${input.date}T00:00:00Z`);
        if (isNaN(updateData.date.getTime())) return { success: false, status: 400, message: "Format tanggal salah." };
     }
+    // 🆕 Mendukung perubahan tipe transaksi (INCOME <-> EXPENSE)
+    if (input.type && (input.type === "INCOME" || input.type === "EXPENSE")) {
+      updateData.type = input.type as TransactionType;
+    }
 
     // 3. Lakukan update di database
     const updatedTransaction = await transactionRepository.updateTransaction(transactionId, updateData);
 
     // 4. Smart Trigger: Write-Time Sync untuk riwayat bulanan
-    // Hanya sync jika amount, categoryId, atau date berubah
+    // Hanya sync jika amount, categoryId, date, atau type berubah
     let needsHistorySync = false;
     if (updateData.amount !== undefined && updateData.amount !== existingTransaction.amount) needsHistorySync = true;
     if (updateData.categoryId !== undefined && updateData.categoryId !== existingTransaction.categoryId) needsHistorySync = true;
     if (updateData.date !== undefined && updateData.date.getTime() !== existingTransaction.date.getTime()) needsHistorySync = true;
+    if (updateData.type !== undefined && updateData.type !== existingTransaction.type) needsHistorySync = true;
 
     if (needsHistorySync) {
       const oldDate = existingTransaction.date;

@@ -7,6 +7,7 @@ type CreateTransactionData = {
   note?: string;
   date: Date;
   categoryId: string;
+  type?: "INCOME" | "EXPENSE"; // 🆕 Default EXPENSE
 };
 
 export const transactionRepository = {
@@ -21,6 +22,7 @@ export const transactionRepository = {
         date: data.date,
         categoryId: data.categoryId,
         userId: userId,
+        type: data.type || "EXPENSE", // 🆕 default EXPENSE aman untuk data lama
       },
     });
   },
@@ -167,7 +169,7 @@ export const transactionRepository = {
    */
   async updateTransaction(
     id: string,
-    data: { amount?: number; categoryId?: string; note?: string; date?: Date }
+    data: Prisma.TransactionUpdateInput
   ) {
     return prisma.transaction.update({
       where: { id: id },

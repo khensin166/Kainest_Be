@@ -14,6 +14,7 @@ export const createTransactionUseCase = async (data) => {
             categoryId: data.categoryId,
             note: data.note,
             date: txDate,
+            type: (data.type === "INCOME" ? "INCOME" : "EXPENSE"),
         });
         // Write-Time Sync untuk riwayat bulanan
         await budgetRepository.syncMonthlyHistory(data.userId, txDate);

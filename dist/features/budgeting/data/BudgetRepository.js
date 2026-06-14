@@ -111,9 +111,12 @@ export const budgetRepository = {
                     totalSpent: 0
                 });
             }
-            const expenses = await this.getMonthlyExpenseGrouped(userId, startDate, endDate);
+            // 🆕 Query terpisah: EXPENSE dan INCOME
+            const expenseGrouped = await this.getMonthlyExpenseGrouped(userId, startDate, endDate);
+            const incomeGrouped = await this.getMonthlyIncomeGrouped(userId, startDate, endDate);
             let actualSaved = 0;
             let totalSpent = 0;
+            let totalIncome = 0;
             const allCategories = await this.findAllCategories(userId);
             let pocketsSnapshot = [];
             if (history.pocketsSnapshot) {
@@ -128,11 +131,12 @@ export const budgetRepository = {
                 }
             }
             pocketsSnapshot = pocketsSnapshot.map((pocket) => {
-                const expense = expenses.find((e) => e.categoryId === pocket.categoryId);
+                const expense = expenseGrouped.find((e) => e.categoryId === pocket.categoryId);
                 pocket.spent = expense?._sum.amount || 0;
                 return pocket;
             });
-            expenses.forEach(curr => {
+            // Hitung totalSpent dan totalSaved dari transaksi EXPENSE
+            expenseGrouped.forEach(curr => {
                 const cat = allCategories.find(c => c.id === curr.categoryId);
                 const isSavings = cat && (cat.name.toLowerCase().includes('tabungan') || cat.name.toLowerCase().includes('saving'));
                 if (isSavings) {
@@ -142,15 +146,20 @@ export const budgetRepository = {
                     totalSpent += (curr._sum.amount || 0);
                 }
             });
+            // Hitung totalIncome dari transaksi INCOME
+            incomeGrouped.forEach(curr => {
+                totalIncome += (curr._sum.amount || 0);
+            });
             await prisma.monthlyFinancialHistory.update({
                 where: { id: history.id },
                 data: {
                     totalSpent: totalSpent,
                     totalSaved: actualSaved,
+                    totalIncome: totalIncome,
                     pocketsSnapshot: pocketsSnapshot
                 }
             });
-            console.log(`✅ [Write-Time Sync] History ${startDate.toISOString()} synced. Total Spent: ${totalSpent}`);
+            console.log(`✅ [Write-Time Sync] History ${startDate.toISOString()} synced. Spent: ${totalSpent}, Income: ${totalIncome}`);
         }
         catch (e) {
             console.error("❌ [Write-Time Sync] Gagal sinkronisasi:", e);
@@ -183,8 +192,7 @@ export const budgetRepository = {
         });
     },
     /**
-     * Mengambil Total Pengeluaran per Kategori dalam satu bulan (Bulk)
-     * Menggunakan GroupBy agar efisien (1 query database)
+     * Mengambil Total Pengeluaran (EXPENSE) per Kategori dalam satu bulan
      */
     async getMonthlyExpenseGrouped(userId, startDate, endDate) {
         return prisma.transaction.groupBy({
@@ -194,6 +202,26 @@ export const budgetRepository = {
             },
             where: {
                 userId: userId,
+                type: "EXPENSE",
+                date: {
+                    gte: startDate,
+                    lte: endDate,
+                },
+            },
+        });
+    },
+    /**
+     * 🆕 Mengambil Total Pemasukan (INCOME) per Kategori dalam satu bulan
+     */
+    async getMonthlyIncomeGrouped(userId, startDate, endDate) {
+        return prisma.transaction.groupBy({
+            by: ["categoryId"],
+            _sum: {
+                amount: true,
+            },
+            where: {
+                userId: userId,
+                type: "INCOME",
                 date: {
                     gte: startDate,
                     lte: endDate,
@@ -222,6 +250,10 @@ export const budgetRepository = {
                 icon: "💰",
                 isDefault: true,
             }, // Dianggap expense cashflow
+            // 🆕 Kategori Pemasukan Default
+            { name: "Pemasukan Umum", type: "INCOME", icon: "💵", isDefault: true },
+            { name: "Gaji & Pendapatan Tetap", type: "INCOME", icon: "🏦", isDefault: true },
+            { name: "Bonus / THR", type: "INCOME", icon: "🎁", isDefault: true },
         ];
         // Gunakan transaction agar atomic (masuk semua atau gagal semua)
         // createMany skipDuplicates hanya jalan di DB tertentu, kita pakai loop aman saja
