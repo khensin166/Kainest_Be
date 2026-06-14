@@ -54,7 +54,7 @@ export const classifyTransactionUseCase = async (
       categoryListText = userPockets
         .map(
           (p) =>
-            `- ID: ${p.category.id} | Nama: ${p.category.name} | Keywords: ${(p.category.keywords || []).join(", ")}`
+            `- ID: ${p.category.id} | Nama: ${p.category.name} | Keywords: ${(p.keywords && p.keywords.length > 0 ? p.keywords : (p.category.keywords || [])).join(", ")}`
         )
         .join("\n");
     } else {

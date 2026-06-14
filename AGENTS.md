@@ -462,6 +462,7 @@ Middleware global yang di-mount di `app.ts` **setelah CORS dan sebelum semua rou
 | 18 | **Fitur GitHub Sync & Changelog API** | Sinkronisasi rilis GitHub otomatis dengan deteksi tag `[BLAST]`. |
 | 19 | **Sinkronisasi Prisma: BackupTargets & ChatLogs** | Penambahan tabel `BackupTargets` & `ChatLogs` ke skema resmi untuk fitur backup chat bot. |
 | 20 | **Hapus Dead Code** | Pembersihan `supabaseClient.ts` yang tidak lagi digunakan karena 100% menggunakan Prisma. |
+| 21 | **Sinkronisasi Prisma: ApiKeys** | Penambahan tabel `ApiKeys` ke skema resmi untuk manajemen akses webhook Bot. |
 
 ---
 

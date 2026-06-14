@@ -1,11 +1,12 @@
-// UpdateCategoryKeywordsUseCase.ts
+// UpdatePocketKeywordsUseCase.ts
 import { pocketRepository } from "../../data/PocketRepository.js";
 
 /**
- * Update keywords pada kategori budget.
- * User bisa menambahkan kata kunci kustom agar LLM semakin pintar mengenali pengeluaran mereka.
+ * Update keywords pada kantong budget.
+ * User bisa menambahkan kata kunci kustom agar LLM semakin pintar mengenali pengeluaran mereka tanpa mengubah kategori sistem.
  */
-export const updateCategoryKeywordsUseCase = async (
+export const updatePocketKeywordsUseCase = async (
+  userId: string,
   categoryId: string,
   keywords: string[]
 ) => {
@@ -15,7 +16,8 @@ export const updateCategoryKeywordsUseCase = async (
       (k) => k.length > 0
     );
 
-    const updated = await pocketRepository.updateCategoryKeywords(
+    const updated = await pocketRepository.updatePocketKeywords(
+      userId,
       categoryId,
       cleanKeywords
     );
@@ -25,11 +27,11 @@ export const updateCategoryKeywordsUseCase = async (
       data: updated,
     };
   } catch (error) {
-    console.error("UpdateCategoryKeywordsUseCase Error:", error);
+    console.error("UpdatePocketKeywordsUseCase Error:", error);
     return {
       success: false,
       status: 500,
-      message: "Gagal memperbarui kata kunci kategori.",
+      message: "Gagal memperbarui kata kunci kantong.",
     };
   }
 };

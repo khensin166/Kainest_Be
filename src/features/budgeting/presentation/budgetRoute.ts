@@ -92,7 +92,7 @@ budgetRoute.delete("/pockets/:categoryId", deletePocketController);
 budgetRoute.post("/pockets/setup", bulkSetupPocketsController);
 
 // PATCH: Update keywords pada kategori tertentu
-budgetRoute.patch("/categories/:categoryId/keywords", updateKeywordsController);
+budgetRoute.patch("/pockets/:categoryId/keywords", updateKeywordsController);
 
 // POST: Klasifikasi teks pengeluaran via AI (Grok)
 budgetRoute.post("/classify", classifyTransactionController);

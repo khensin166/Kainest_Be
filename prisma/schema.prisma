@@ -283,6 +283,7 @@ model BudgetPocket {
   
   percentage  Float?   // Persentase alokasi dari total gaji (misal: 15)
   limitAmount Float?   // Atau nominal pasti jika tidak ingin persen (misal: 500000)
+  keywords    String[] @default([]) // Kata kunci spesifik kantong
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
