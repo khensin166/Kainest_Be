@@ -7,6 +7,7 @@ interface GetTransactionsInput {
   startDate?: string; // Format YYYY-MM-DD
   endDate?: string;   // Format YYYY-MM-DD
   search?: string;
+  type?: "INCOME" | "EXPENSE" | "ALL";
 }
 
 export const getTransactionsUseCase = async (input: GetTransactionsInput) => {
@@ -40,6 +41,7 @@ export const getTransactionsUseCase = async (input: GetTransactionsInput) => {
       startDate: filterStartDate,
       endDate: filterEndDate,
       search: input.search,
+      type: input.type,
       skip,
       take,
     });

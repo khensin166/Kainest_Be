@@ -146,8 +146,8 @@ export const getTrendController = async (c: Context) => {
 export const getTransactionsController = async (c: Context) => {
   const userId = c.get("userId");
 
-  // URL contoh: /budget/transactions?page=1&limit=10&search=soto
-  const { page, limit, startDate, endDate, search } = c.req.query();
+  // URL contoh: /budget/transactions?page=1&limit=10&search=soto&type=EXPENSE
+  const { page, limit, startDate, endDate, search, type } = c.req.query();
 
   const result = await getTransactionsUseCase({
     userId,
@@ -156,6 +156,7 @@ export const getTransactionsController = async (c: Context) => {
     startDate,
     endDate,
     search,
+    type: type as any,
   });
 
   if (!result.success) c.status(result.status as any);

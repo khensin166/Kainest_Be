@@ -78,6 +78,7 @@ export const transactionRepository = {
     startDate,
     endDate,
     search,
+    type,
     skip,
     take,
   }: {
@@ -85,6 +86,7 @@ export const transactionRepository = {
     startDate?: Date;
     endDate?: Date;
     search?: string;
+    type?: "INCOME" | "EXPENSE" | "ALL";
     skip: number;
     take: number;
   }) {
@@ -99,6 +101,10 @@ export const transactionRepository = {
         gte: startDate,
         lte: endDate,
       };
+    }
+
+    if (type && type !== "ALL") {
+      whereClause.type = type;
     }
 
     // Filter Search (Case Insensitive)
@@ -128,9 +134,10 @@ export const transactionRepository = {
         where: whereClause,
         skip: skip, // Loncat sekian data (offset)
         take: take, // Ambil sekian data (limit)
-        orderBy: {
-          date: "desc", // Urutkan dari yang paling baru
-        },
+        orderBy: [
+          { date: "desc" },
+          { createdAt: "desc" }
+        ],
         // Include data kategori agar di UI bisa tampil ikon dan namanya
         include: {
           category: {
