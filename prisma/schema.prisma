@@ -283,6 +283,7 @@ model BudgetPocket {
   
   percentage  Float?   // Persentase alokasi dari total gaji (misal: 15)
   limitAmount Float?   // Atau nominal pasti jika tidak ingin persen (misal: 500000)
+  keywords    String[] @default([]) // Kata kunci spesifik kantong
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -412,5 +413,47 @@ model BotActiveGroup {
   createdAt DateTime @default(now())
 
   @@index([groupId])
+  @@schema("kainest")
+}
+
+model BackupTargets {
+  id         String   @id @default(uuid())
+  session_id String
+  chat_id    String
+  name       String?
+  createdAt  DateTime @default(now())
+
+  ChatLogs ChatLogs[]
+
+  @@unique([session_id, chat_id])
+  @@index([chat_id])
+  @@schema("kainest")
+}
+
+model ChatLogs {
+  id              String        @id @default(uuid())
+  session_id      String
+  chat_id         String
+  sender          String
+  message_content String        @db.Text
+  message_type    String        @default("conversation")
+  timestamp       DateTime
+  raw_data        Json?
+  createdAt       DateTime      @default(now())
+
+  BackupTarget BackupTargets @relation(fields: [chat_id, session_id], references: [chat_id, session_id])
+
+  @@index([chat_id, session_id])
+  @@index([timestamp(sort: Desc)])
+  @@schema("kainest")
+}
+
+model ApiKeys {
+  id         String   @id @default(uuid())
+  name       String
+  key        String   @unique
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+
   @@schema("kainest")
 }

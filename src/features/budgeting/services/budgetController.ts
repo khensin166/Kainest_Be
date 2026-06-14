@@ -15,7 +15,7 @@ import { getPocketsUseCase } from "../domain/use-cases/GetPocketsUseCase.js";
 import { upsertPocketUseCase } from "../domain/use-cases/UpsertPocketUseCase.js";
 import { deletePocketUseCase } from "../domain/use-cases/DeletePocketUseCase.js";
 import { bulkSetupPocketsUseCase } from "../domain/use-cases/BulkSetupPocketsUseCase.js";
-import { updateCategoryKeywordsUseCase } from "../domain/use-cases/UpdateCategoryKeywordsUseCase.js";
+import { updatePocketKeywordsUseCase } from "../domain/use-cases/UpdatePocketKeywordsUseCase.js";
 import { classifyTransactionUseCase } from "../domain/use-cases/ClassifyTransactionUseCase.js";
 import { getMonthlyHistoryUseCase } from "../domain/use-cases/GetMonthlyHistoryUseCase.js";
 // === Create Transaction ===
@@ -249,12 +249,13 @@ export const bulkSetupPocketsController = async (c: Context) => {
   return c.json(result);
 };
 
-// === PATCH: Update keywords kategori ===
+// === PATCH: Update keywords kantong ===
 export const updateKeywordsController = async (c: Context) => {
+  const userId = c.get("userId");
   const categoryId = c.req.param("categoryId");
   const body = await c.req.json();
 
-  const result = await updateCategoryKeywordsUseCase(categoryId, body.keywords);
+  const result = await updatePocketKeywordsUseCase(userId, categoryId, body.keywords);
 
   if (!result.success) c.status(result.status as any);
   return c.json(result);

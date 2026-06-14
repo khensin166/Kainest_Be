@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { authMiddleware } from "../../auth/presentation/authMiddleware.js";
 import { createTransactionController, getBudgetStatusController, getCategoriesController, createCustomCategoryController, setupBudgetController, getSummaryController, getAiAdviceController, seedCategoriesController, evaluateBudgetController, getTrendController, getTransactionsController, getTransactionDetailController, updateTransactionController, deleteTransactionController, 
 // Pocket Controllers
-getPocketsController, upsertPocketController, deletePocketController, bulkSetupPocketsController, updateKeywordsController, classifyTransactionController, } from "../services/budgetController.js";
+getPocketsController, upsertPocketController, deletePocketController, bulkSetupPocketsController, updateKeywordsController, classifyTransactionController, getMonthlyHistoryController, } from "../services/budgetController.js";
 export const budgetRoute = new Hono();
 // Middleware Auth (Wajib Login)
 budgetRoute.use("*", authMiddleware);
@@ -49,6 +49,11 @@ budgetRoute.delete("/pockets/:categoryId", deletePocketController);
 // POST: Bulk setup kantong (untuk onboarding)
 budgetRoute.post("/pockets/setup", bulkSetupPocketsController);
 // PATCH: Update keywords pada kategori tertentu
-budgetRoute.patch("/categories/:categoryId/keywords", updateKeywordsController);
+budgetRoute.patch("/pockets/:categoryId/keywords", updateKeywordsController);
 // POST: Klasifikasi teks pengeluaran via AI (Grok)
 budgetRoute.post("/classify", classifyTransactionController);
+// ==========================================
+// 📅 MONTHLY HISTORY ROUTES
+// ==========================================
+// GET: Riwayat keuangan bulanan user
+budgetRoute.get("/history", getMonthlyHistoryController);

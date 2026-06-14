@@ -17,6 +17,11 @@ export const pocketRepository = {
      * Buat atau update kantong user untuk kategori tertentu (Upsert)
      */
     async upsertPocket(userId, categoryId, data) {
+        const category = await prisma.budgetCategory.findUnique({
+            where: { id: categoryId },
+            select: { keywords: true },
+        });
+        const defaultKeywords = category?.keywords || [];
         return prisma.budgetPocket.upsert({
             where: {
                 userId_categoryId: { userId, categoryId },
@@ -30,6 +35,7 @@ export const pocketRepository = {
                 categoryId,
                 percentage: data.percentage,
                 limitAmount: data.limitAmount,
+                keywords: defaultKeywords,
             },
             include: { category: true },
         });
@@ -48,8 +54,23 @@ export const pocketRepository = {
      * Bulk upsert kantong dari array (untuk setup awal)
      */
     async bulkUpsertPockets(userId, pockets) {
+        const categoryIds = pockets.map((p) => p.categoryId);
+        if (categoryIds.length > 0) {
+            await prisma.budgetPocket.deleteMany({
+                where: {
+                    userId,
+                    categoryId: { notIn: categoryIds },
+                },
+            });
+        }
+        const categories = await prisma.budgetCategory.findMany({
+            where: { id: { in: categoryIds } },
+            select: { id: true, keywords: true },
+        });
+        const categoryKeywordsMap = new Map(categories.map((c) => [c.id, c.keywords]));
         const results = [];
         for (const pocket of pockets) {
+            const defaultKeywords = categoryKeywordsMap.get(pocket.categoryId) || [];
             const result = await prisma.budgetPocket.upsert({
                 where: {
                     userId_categoryId: { userId, categoryId: pocket.categoryId },
@@ -63,6 +84,7 @@ export const pocketRepository = {
                     categoryId: pocket.categoryId,
                     percentage: pocket.percentage,
                     limitAmount: pocket.limitAmount,
+                    keywords: defaultKeywords,
                 },
                 include: { category: true },
             });
@@ -90,11 +112,11 @@ export const pocketRepository = {
         });
     },
     /**
-     * Update keywords pada kategori tertentu
+     * Update keywords pada kantong tertentu
      */
-    async updateCategoryKeywords(categoryId, keywords) {
-        return prisma.budgetCategory.update({
-            where: { id: categoryId },
+    async updatePocketKeywords(userId, categoryId, keywords) {
+        return prisma.budgetPocket.update({
+            where: { userId_categoryId: { userId, categoryId } },
             data: { keywords },
         });
     },

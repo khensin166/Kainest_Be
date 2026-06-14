@@ -17,7 +17,16 @@ export const bulkSetupPocketsUseCase = async (data) => {
         }
         // Validasi setiap pocket
         let totalPercentage = 0;
+        const uniqueCategoryIds = new Set();
         for (const p of pockets) {
+            if (uniqueCategoryIds.has(p.categoryId)) {
+                return {
+                    success: false,
+                    status: 400,
+                    message: `Kategori ganda terdeteksi (ID: ${p.categoryId}). Setiap kantong harus menggunakan kategori yang unik.`,
+                };
+            }
+            uniqueCategoryIds.add(p.categoryId);
             if (p.percentage != null && (p.percentage < 0 || p.percentage > 100)) {
                 return {
                     success: false,
@@ -47,34 +56,31 @@ export const bulkSetupPocketsUseCase = async (data) => {
         const now = new Date();
         const period = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
         let totalBudgeted = 0;
-        let totalSaved = 0;
         const pocketsSnapshot = pockets.map((p) => {
             let amountLimit = p.limitAmount || 0;
             if (p.percentage != null) {
                 amountLimit = Math.floor((p.percentage / 100) * salary);
             }
             const catDetail = categories.find(c => c.id === p.categoryId);
-            const isSaving = catDetail?.name.toLowerCase().includes('tabungan') || catDetail?.name.toLowerCase().includes('saving');
             totalBudgeted += amountLimit;
-            if (isSaving) {
-                totalSaved += amountLimit;
-            }
             return {
                 categoryId: p.categoryId,
                 categoryName: catDetail?.name || "Unknown",
                 icon: catDetail?.icon || "💰",
                 limitAmount: amountLimit,
+                spent: 0 // Will be recalculated by syncMonthlyHistory
             };
         });
-        // Cari tahu totalSpent saat ini jika history sudah ada, supaya tidak kereset ke 0
         const existingHistory = await budgetRepository.findMonthlyHistory(userId, period);
         await budgetRepository.upsertMonthlyHistory(userId, period, {
             salarySnapshot: salary,
             totalBudgeted: totalBudgeted,
-            totalSaved: totalSaved,
+            totalSaved: existingHistory?.totalSaved || 0,
             pocketsSnapshot: pocketsSnapshot,
             totalSpent: existingHistory?.totalSpent || 0,
         });
+        // Recalculate all spent amounts based on the new pockets
+        await budgetRepository.syncMonthlyHistory(userId, period);
         return {
             success: true,
             message: `${results.length} kantong berhasil disimpan.`,

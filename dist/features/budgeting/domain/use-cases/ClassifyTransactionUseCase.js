@@ -33,7 +33,7 @@ export const classifyTransactionUseCase = async (userId, text) => {
         if (userPockets.length > 0) {
             // User punya kantong -> kirim hanya kantong mereka
             categoryListText = userPockets
-                .map((p) => `- ID: ${p.category.id} | Nama: ${p.category.name} | Keywords: ${(p.category.keywords || []).join(", ")}`)
+                .map((p) => `- ID: ${p.category.id} | Nama: ${p.category.name} | Keywords: ${(p.keywords && p.keywords.length > 0 ? p.keywords : (p.category.keywords || [])).join(", ")}`)
                 .join("\n");
         }
         else {
