@@ -115,14 +115,27 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
     const prevHistory = await budgetRepository.findMonthlyHistory(userId, prevMonthStart);
     const prevSpent = prevHistory?.totalSpent || 0;
     const prevIncome = prevHistory?.totalIncome || 0;
+    // Untuk limit & remaining bulan lalu, kita ambil dari snapshot history
+    let prevPocketsSnapshot: any[] = [];
+    if (prevHistory?.pocketsSnapshot) {
+      try {
+        prevPocketsSnapshot = typeof prevHistory.pocketsSnapshot === 'string'
+          ? JSON.parse(prevHistory.pocketsSnapshot)
+          : (Array.isArray(prevHistory.pocketsSnapshot) ? prevHistory.pocketsSnapshot : []);
+      } catch { prevPocketsSnapshot = []; }
+    }
+    const prevLimit = prevPocketsSnapshot.reduce((acc: number, p: any) => acc + (p.limitAmount || 0), 0);
+    const prevRemaining = prevLimit - prevSpent;
+    const totalRemaining = totalLimit - totalSpent;
 
-    // momSpent: positif = naik (lebih boros), negatif = turun (lebih hemat), null = tidak ada data bulan lalu
-    const momSpent = prevSpent > 0
-      ? Math.round(((totalSpent - prevSpent) / prevSpent) * 100)
-      : null;
-    const momIncome = prevIncome > 0
-      ? Math.round(((totalIncome - prevIncome) / prevIncome) * 100)
-      : null;
+    // Helper: hitung persen MoM, null jika data bulan lalu tidak ada/nol
+    const calcMom = (curr: number, prev: number) =>
+      prev > 0 ? Math.round(((curr - prev) / prev) * 100) : null;
+
+    const momLimit = calcMom(totalLimit, prevLimit);
+    const momSpent = calcMom(totalSpent, prevSpent);
+    const momAdditionalIncome = calcMom(totalIncome, prevIncome);
+    const momRemaining = prevRemaining !== 0 ? calcMom(totalRemaining, prevRemaining) : null;
 
     return {
       success: true,
@@ -136,18 +149,21 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
           limit: totalLimit,
           spent: totalSpent,
           additionalIncome: totalIncome,
-          remaining: totalLimit - totalSpent,
+          remaining: totalRemaining,
           unallocated: unallocated,
-          // 🆕 Perbandingan vs bulan lalu (null jika tidak ada data historis)
+          // Perbandingan vs bulan lalu (null jika tidak ada data historis)
           mom: {
+            limit: momLimit,
             spent: momSpent,
-            income: momIncome,
+            additionalIncome: momAdditionalIncome,
+            remaining: momRemaining,
           }
         },
 
         categories: summary,
       },
     };
+
 
   } catch (error) {
     console.error("Get Summary Error:", error);
