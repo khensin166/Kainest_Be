@@ -135,7 +135,7 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
         totals: {
           limit: totalLimit,
           spent: totalSpent,
-          income: totalIncome,
+          additionalIncome: totalIncome,
           remaining: totalLimit - totalSpent,
           unallocated: unallocated,
           // 🆕 Perbandingan vs bulan lalu (null jika tidak ada data historis)
@@ -144,6 +144,7 @@ export const getMonthlySummaryUseCase = async (userId: string) => {
             income: momIncome,
           }
         },
+
         categories: summary,
       },
     };
