@@ -464,6 +464,8 @@ Middleware global yang di-mount di `app.ts` **setelah CORS dan sebelum semua rou
 | 20 | **Hapus Dead Code** | Pembersihan `supabaseClient.ts` yang tidak lagi digunakan karena 100% menggunakan Prisma. |
 | 21 | **Sinkronisasi Prisma: ApiKeys** | Penambahan tabel `ApiKeys` ke skema resmi untuk manajemen akses webhook Bot. |
 | 22 | **Isolasi Keyword Kantong** | Memindahkan logika penyimpanan `keywords` AI ke model `BudgetPocket` agar setiap pengguna dapat memiliki referensi NLP yang terisolasi, dengan *fallback* aman ke kategori. |
+| 23 | **Sort Transaksi by CreatedAt** | Perbaikan *sorting* list transaksi (`TransactionRepository`) menjadi murni berdasarkan `createdAt: 'desc'`, mengabaikan parameter `date` agar transaksi yang baru saja ditambahkan selalu berada di posisi teratas. |
+| 24 | **Pemasukan Tambahan & MoM Komprehensif** | Pemisahan stat `income` menjadi `additionalIncome` di response `totals` agar jelas bahwa tambahan di luar gaji pokok tidak memengaruhi `remaining` (Sisa Gaji Pokok). Implementasi kalkulasi MoM (Month-over-Month) komprehensif untuk field (`limit`, `spent`, `additionalIncome`, `remaining`) di `GetMonthlySummaryUseCase`. |
 
 ---
 
