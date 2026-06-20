@@ -24,6 +24,7 @@ export const transactionRepository = {
         userId: userId,
         type: data.type || "EXPENSE", // 🆕 default EXPENSE aman untuk data lama
       },
+      include: { category: true },
     });
   },
 
