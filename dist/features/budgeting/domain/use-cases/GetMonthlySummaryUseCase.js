@@ -88,13 +88,27 @@ export const getMonthlySummaryUseCase = async (userId) => {
         const prevHistory = await budgetRepository.findMonthlyHistory(userId, prevMonthStart);
         const prevSpent = prevHistory?.totalSpent || 0;
         const prevIncome = prevHistory?.totalIncome || 0;
-        // momSpent: positif = naik (lebih boros), negatif = turun (lebih hemat), null = tidak ada data bulan lalu
-        const momSpent = prevSpent > 0
-            ? Math.round(((totalSpent - prevSpent) / prevSpent) * 100)
-            : null;
-        const momIncome = prevIncome > 0
-            ? Math.round(((totalIncome - prevIncome) / prevIncome) * 100)
-            : null;
+        // Untuk limit & remaining bulan lalu, kita ambil dari snapshot history
+        let prevPocketsSnapshot = [];
+        if (prevHistory?.pocketsSnapshot) {
+            try {
+                prevPocketsSnapshot = typeof prevHistory.pocketsSnapshot === 'string'
+                    ? JSON.parse(prevHistory.pocketsSnapshot)
+                    : (Array.isArray(prevHistory.pocketsSnapshot) ? prevHistory.pocketsSnapshot : []);
+            }
+            catch {
+                prevPocketsSnapshot = [];
+            }
+        }
+        const prevLimit = prevPocketsSnapshot.reduce((acc, p) => acc + (p.limitAmount || 0), 0);
+        const prevRemaining = prevLimit - prevSpent;
+        const totalRemaining = totalLimit - totalSpent;
+        // Helper: hitung persen MoM, null jika data bulan lalu tidak ada/nol
+        const calcMom = (curr, prev) => prev > 0 ? Math.round(((curr - prev) / prev) * 100) : null;
+        const momLimit = calcMom(totalLimit, prevLimit);
+        const momSpent = calcMom(totalSpent, prevSpent);
+        const momAdditionalIncome = calcMom(totalIncome, prevIncome);
+        const momRemaining = prevRemaining !== 0 ? calcMom(totalRemaining, prevRemaining) : null;
         return {
             success: true,
             data: {
@@ -106,13 +120,15 @@ export const getMonthlySummaryUseCase = async (userId) => {
                 totals: {
                     limit: totalLimit,
                     spent: totalSpent,
-                    income: totalIncome,
-                    remaining: totalLimit - totalSpent,
+                    additionalIncome: totalIncome,
+                    remaining: totalRemaining,
                     unallocated: unallocated,
-                    // 🆕 Perbandingan vs bulan lalu (null jika tidak ada data historis)
+                    // Perbandingan vs bulan lalu (null jika tidak ada data historis)
                     mom: {
+                        limit: momLimit,
                         spent: momSpent,
-                        income: momIncome,
+                        additionalIncome: momAdditionalIncome,
+                        remaining: momRemaining,
                     }
                 },
                 categories: summary,

@@ -14,6 +14,7 @@ export const transactionRepository = {
                 userId: userId,
                 type: data.type || "EXPENSE", // 🆕 default EXPENSE aman untuk data lama
             },
+            include: { category: true },
         });
     },
     /**
@@ -54,7 +55,7 @@ export const transactionRepository = {
             },
         });
     },
-    async findTransactions({ userId, startDate, endDate, search, skip, take, }) {
+    async findTransactions({ userId, startDate, endDate, search, type, skip, take, }) {
         // 1. Bangun kondisi WHERE secara dinamis
         const whereClause = {
             userId: userId,
@@ -65,6 +66,9 @@ export const transactionRepository = {
                 gte: startDate,
                 lte: endDate,
             };
+        }
+        if (type && type !== "ALL") {
+            whereClause.type = type;
         }
         // Filter Search (Case Insensitive)
         // Mencari di kolom 'note' ATAU nama 'category'
@@ -92,9 +96,7 @@ export const transactionRepository = {
                 where: whereClause,
                 skip: skip, // Loncat sekian data (offset)
                 take: take, // Ambil sekian data (limit)
-                orderBy: {
-                    date: "desc", // Urutkan dari yang paling baru
-                },
+                orderBy: { createdAt: "desc" }, // Murni urut berdasarkan waktu input ke sistem
                 // Include data kategori agar di UI bisa tampil ikon dan namanya
                 include: {
                     category: {

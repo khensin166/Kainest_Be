@@ -26,6 +26,7 @@ export const getTransactionsUseCase = async (input) => {
             startDate: filterStartDate,
             endDate: filterEndDate,
             search: input.search,
+            type: input.type,
             skip,
             take,
         });
