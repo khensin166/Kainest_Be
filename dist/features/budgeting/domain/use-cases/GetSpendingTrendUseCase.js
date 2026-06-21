@@ -12,9 +12,18 @@ export const getSpendingTrendUseCase = async (userId) => {
         // Tanggal yang tidak ada transaksi tidak akan muncul di sini.
         const rawTrend = await transactionRepository.getDailyTrend(userId, startDate, endDate);
         // 3. Format Hasil agar lebih bersih sebelum dikirim ke frontend
-        const formattedTrend = rawTrend.map(item => ({
-            date: item.date.toISOString().split('T')[0], // Ambil bagian tanggalnya saja (YYYY-MM-DD)
-            totalSpent: item._sum.amount || 0
+        // Agregasi (Group by string YYYY-MM-DD) agar transaksi di hari yang sama terjumlah
+        const aggregatedTrend = {};
+        rawTrend.forEach(item => {
+            const dateStr = item.date.toISOString().split('T')[0];
+            if (!aggregatedTrend[dateStr]) {
+                aggregatedTrend[dateStr] = 0;
+            }
+            aggregatedTrend[dateStr] += (item._sum.amount || 0);
+        });
+        const formattedTrend = Object.keys(aggregatedTrend).map(date => ({
+            date,
+            totalSpent: aggregatedTrend[date]
         }));
         return {
             success: true,

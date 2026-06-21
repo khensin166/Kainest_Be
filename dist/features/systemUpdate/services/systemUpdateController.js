@@ -29,6 +29,7 @@ export async function syncGithubReleasesController(c) {
         const headers = {
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "Kainest-Backend",
+            "Cache-Control": "no-cache",
         };
         if (token) {
             headers["Authorization"] = `token ${token}`;

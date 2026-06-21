@@ -267,7 +267,7 @@ export const budgetRepository = {
                 const newCat = await prisma.budgetCategory.create({
                     data: {
                         name: cat.name,
-                        type: "EXPENSE", // Cast enum
+                        type: cat.type, // Cast enum
                         icon: cat.icon,
                         isDefault: true,
                         // userId null artinya ini global category
