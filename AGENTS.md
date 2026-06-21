@@ -1,484 +1,164 @@
-# 🤖 Kainest Backend — Software Requirements Specification (SRS) & Agent Guidelines
+# Kainest Project - Agent Handoff Notes
 
-Dokumen ini mendefinisikan spesifikasi kebutuhan perangkat lunak (SRS), arsitektur, skema database, spesifikasi API, perubahan sistem terbaru, serta rencana pengembangan masa depan untuk **Kainest Backend (`Kainest_Be`)**. Dokumen ini bersifat _living document_ dan ditujukan bagi pengembang serta AI Agent yang bekerja pada repositori ini.
+## Status Terkini (03 Juni 2026)
+- **Frontend (Kainest Vue 3):**
+  - Menggunakan UI/UX modern (vibrant colors, glassmorphism, blob animation).
+  - Auth flow (Login, Register, Forgot Password, Reset Password) sudah terkoneksi dengan backend *Better Auth*.
+  - Halaman Lupa Password (`/forgot-password`) & Reset Password (`/reset-password`) telah didesain ulang dengan gaya *split-screen* yang sama dengan halaman Login.
+  - Terdapat komponen panduan (`<PageGuide>`) di seluruh halaman utama.
 
-> **PENTING UNTUK AGENT**: Selalu baca dokumen ini terlebih dahulu sebelum melakukan perubahan apapun pada kode. Patuhi aturan arsitektur, konvensi naming, dan pola response yang sudah ditetapkan.
-
----
-
-## 1. PENDAHULUAN (SYSTEM OVERVIEW)
-
-Kainest Backend adalah layanan API server berbasis **Hono.js (Node.js/TypeScript)** yang menyediakan _backend engine_ untuk aplikasi asisten keuangan personal dan pasangan (Kainest).
-
-Sistem ini bertanggung jawab atas:
-- Autentikasi & manajemen sesi pengguna (via Better Auth)
-- Pengelolaan "Kantong" budget bulanan berbasis persentase atau nominal
-- Penyimpanan & pengambilan data riwayat keuangan bulanan (Monthly Financial History)
-- Pencatatan transaksi harian
-- Integrasi AI (Groq LLM) untuk klasifikasi transaksi berbasis teks alami & saran finansial
-- Logging struktural setiap permintaan HTTP secara global
-
----
-
-## 2. ARSITEKTUR & STRUKTUR SISTEM (ARCHITECTURAL SPECIFICATION)
-
-Proyek ini mengadopsi **Feature-Based Clean Architecture** (Domain-Driven Design) untuk mempermudah modularitas, perawatan, dan perluasan sistem.
-
-### 2.1 Struktur Direktori Utama
-
-```text
-src/
-├── app.ts                  # Inisialisasi Hono app, global middleware (CORS, Logging), & pendaftaran route
-├── server.ts               # Entry point aplikasi (menjalankan HTTP server Node.js)
-├── infrastructure/         # Integrasi layanan pihak ketiga
-│   ├── auth.ts             # Konfigurasi Better Auth
-│   ├── database/           # Prisma Client singleton
-│   ├── ai/                 # Groq AI service
-│   ├── cloud/              # Cloudinary client
-│   └── middlewares/
-│       ├── AuthMiddleware.ts      # Middleware validasi JWT token
-│       ├── ErrorMiddleware.ts     # Global error handler
-│       └── LoggingMiddleware.ts   # 🆕 Global structured JSON logging
-├── utils/                  # Fungsi pembantu global
-└── features/               # Modul fitur terisolasi (Domain-Driven)
-    ├── auth/
-    ├── budgeting/
-    ├── notes/
-    ├── todos/
-    ├── profile/
-    ├── couple/
-    ├── wabot/
-    ├── upload/
-    └── admin/
-```
-
-### 2.2 Lapisan Modul Fitur (`features/budgeting/` sebagai contoh)
-
-Alur data satu arah: **Route → Controller → Use Case → Repository → Database**
-
-| Lapisan | File | Tanggung Jawab |
-|---|---|---|
-| **Presentation** | `budgetRoute.ts` | Mendaftarkan endpoint HTTP & menghubungkan dengan middleware auth |
-| **Presentation** | `budgetController.ts` | Ekstrak parameter dari Hono Context `c`, teruskan ke Use Case, kembalikan JSON response |
-| **Domain** | `domain/use-cases/*.ts` | Logika bisnis inti — agnostik terhadap HTTP & framework database |
-| **Data** | `data/BudgetRepository.ts` | Mengabstraksikan & mengeksekusi operasi database via Prisma ORM |
-| **Data** | `data/PocketRepository.ts` | Operasi database khusus untuk entitas `BudgetPocket` |
-
-### 2.3 Aturan & Standar Pengembangan Wajib (Untuk Agent)
-
-- **Strict Clean Architecture**: Jangan pernah memanggil Prisma Client secara langsung dari Controller. Semua I/O database harus melewati Repository.
-- **Pola Response**: Gunakan pola `success/failure` yang konsisten. Di sisi backend (Use Case), kembalikan objek dengan format `{ success: true, data: ... }` atau `{ success: false, status: number, message: string }`.
-- **Pola Either di Frontend**: Pengecekan hasil Use Case di frontend menggunakan properti `.right` (sukses) dan `.left` (gagal). **Jangan** memanggil `.isRight()` karena tidak didukung.
-
----
-
-## 3. SPESIFIKASI DATABASE (DATABASE SCHEMA)
-
-Menggunakan **PostgreSQL** (via Supabase) dengan **Prisma ORM**. Semua model berada di schema `kainest`.
-
-### 3.1 Model Utama Fitur Budgeting
-
-#### `BudgetCategory`
-Daftar kategori pengeluaran yang dapat digunakan sebagai "label" kantong.
-- `isDefault: Boolean` — `true` untuk kategori sistem (global), `false` untuk kategori kustom user.
-- `userId: String?` — `null` untuk kategori global (admin/sistem), diisi ID user untuk kategori yang dibuat user sendiri.
-- `keywords: String[]` — Kata kunci untuk klasifikasi transaksi AI (contoh: `["makan", "gofood", "warteg"]`).
-- `type: TransactionType` — Enum `INCOME` atau `EXPENSE`.
-
-> **Logika Visibilitas Kategori**: Query `findAllCategories(userId)` menggunakan `OR` logic: mengembalikan semua kategori yang `isDefault: true` **ATAU** milik `userId` tersebut. User hanya melihat kategori global + kategori kustom miliknya sendiri.
-
-#### `BudgetPocket`
-Template kantong budget permanen milik user per kategori. Ini adalah **sumber kebenaran (source of truth)** untuk konfigurasi alokasi budget user.
-- `percentage: Float?` — Alokasi sebagai persentase dari gaji (misal: `20` untuk 20%).
-- `limitAmount: Float?` — Alokasi sebagai nominal Rupiah tetap (misal: `500000`).
-- `@unique([userId, categoryId])` — Satu user hanya boleh punya satu kantong per kategori.
-
-#### `MonthlyFinancialHistory` 🆕
-Snapshot riwayat keuangan per bulan per user.  - Variabel lingkungan `RESEND_FROM_EMAIL` sudah disiapkan di `.env`.
+- **Backend (Kainest_Be - Hono & Prisma):**
+  - Menggunakan *Better Auth* v1.6+. Endpoint untuk lupa password berada di `/auth/request-password-reset`.
+  - Integrasi **Resend** telah ditambahkan di dalam `auth.ts` untuk mengirimkan email *Reset Password*.
+  - Template email telah diekstrak secara rapi ke `src/infrastructure/email/templates/resetPasswordTemplate.ts`.
+  - Variabel lingkungan `RESEND_FROM_EMAIL` sudah disiapkan di `.env`.
 
 ## Update 04 Juni 2026
 - **Frontend**: Dashboard dirombak dengan memfokuskan layout pada ringkasan keuangan dan Aktivitas Terbaru di sisi utama. `System Updates` dan `User Feedback` ditarik dinamis dari API. `DropdownNotifications` kini interaktif (terhubung ke backend). Sidebar `filteredMenu` bereaksi otomatis saat login, dan menu `Vault Rahasia` sudah dilindungi permission.
 - **Backend**: Skema `NotificationLog` dan `ShiftActivity` lama dihilangkan, digantikan dengan `AppNotification` & `UserFeedback` serta `SystemUpdate`. Endpoint API notifikasi, feedback, dan changelog (termasuk fitur *Sync dari GitHub* dengan deteksi keyword `[BLAST]`) telah aktif di Hono.
-- **Bot WhatsApp**: Alur registrasi `!link` diperketat (tidak bisa lagi aktivasi personal sebelum membuat grup). Bot kini juga merespons transaksi berhasil dengan mengirimkan stiker animasi *kicaw*. digantikan sepenuhnya oleh tabel ini.**
-- `period: DateTime (@db.Date)` — Tanggal awal bulan (misal: `2026-05-01`).
-- `salarySnapshot: Int` — Gaji user pada saat snapshot dibuat.
-- `totalBudgeted: Int` — Total nominal yang dialokasikan ke semua kantong bulan tersebut.
-- `totalSaved: Int` — Total nominal yang dialokasikan ke kantong tabungan/saving.
-- `totalSpent: Int` — Total pengeluaran aktual bulan tersebut (dihitung dinamis dari tabel `Transaction`).
-- `pocketsSnapshot: Json` — **Fotokopi JSON** dari semua kantong aktif user pada saat itu, berisi: `[{ categoryId, categoryName, icon, limitAmount }]`.
-- `aiEvaluation: String?` — Hasil teks evaluasi AI di akhir bulan.
-- `@unique([userId, period])` — Satu history per user per bulan.
+- **Bot WhatsApp**: Alur registrasi `!link` diperketat (tidak bisa lagi aktivasi personal sebelum membuat grup). Bot kini juga merespons transaksi berhasil dengan mengirimkan stiker animasi *kicaw*.
 
-#### `Transaction`
-Catatan pengeluaran/pemasukan harian.
-- `amount: Int`, `note: String?`, `date: DateTime`, `categoryId: String`, `userId: String`.
+## Update 13 Juni 2026
+- **Frontend**:
+  - Menyederhanakan modal Atur Pemasukan (`BudgetSetupModal.vue`) dengan menghapus input target tabungan yang redundan dan menambahkan teks edukasi penjelas gaji sebagai acuan 100%.
+  - Memberikan helper text tambahan pada tabel input Kelola Kantong (`PocketManagementModal.vue`).
+  - Menambahkan panduan visual interaktif (efek *glow pulse* ungu) pada tombol "Kelola Kantong" di dashboard saat terdeteksi user telah mengisi gaji namun belum memiliki kantong sama sekali (alurnya diarahkan secara visual).
+- **Backend**:
+  - Sinkronisasi skema Prisma (`schema.prisma`) untuk model `BackupTargets`, `ChatLogs`, dan `ApiKeys` dengan schema `kainest`.
+  - Pembersihan file client Supabase lama (`supabaseClient.ts`) yang tidak digunakan untuk menjaga kebersihan repositori.
+- **Bot WhatsApp (Staging Safe Mode, Ephemeral Fix & Schema Views)**:
+  - Mengembalikan konfigurasi schema Supabase ke default (`public`) dan menggunakan PostgreSQL Views di skema `public` yang merujuk ke tabel asli di skema `kainest` untuk menghindari pemblokiran query oleh PostgREST.
+  - Menerapkan isolasi environment via `BOT_ENV_MODE` (`staging` / `production`). Pada mode staging, bot hanya merespons nomor terdaftar di `STAGING_ALLOWED_NUMBERS` dan harus diawali perintah `!dev ` (prefix dilepas otomatis saat masuk ke pemrosesan AI).
+  - Isolasi blast pengingat shift kerja pada mode staging agar hanya terkirim ke `STAGING_ALLOWED_NUMBERS`.
+  - Perbaikan warning *"This message will not disappear..."* dengan menyalin status durasi ephemeral (`expiration` milidetik) dari pesan masuk dan meneruskannya ke objek `sendMessage` (baik teks maupun stiker).
 
-#### `AISuggestion`
-Log saran finansial yang dihasilkan oleh AI Groq.
+## Update 14 Juni 2026
+- **Frontend & Backend (Isolasi Kata Kunci Kantong)**: 
+  - Logika kata kunci AI (*keywords*) dipindahkan dari level Kategori ke level Kantong (`BudgetPocket`). Ini memungkinkan pengguna menambahkan kata kunci custom ke kantong mereka sendiri tanpa memengaruhi kategori global atau pengguna lain.
+  - Kategori tetap menyimpan `keywords` sebagai *template* (nilai *default*) saat pengguna membuat kantong baru.
+  - Jika pengguna mengosongkan *keywords* pada kantongnya, sistem (Kenin AI) akan otomatis melakukan *fallback* ke *keywords* milik kategori sebagai pengaman.
 
-#### `BotActiveGroup` 🆕
-Menyimpan ID grup WhatsApp yang telah diaktifkan untuk bot pencatatan keuangan (Kainest WA Bot).
-- `id: String` (Primary Key, UUID, default auto-generate via database `gen_random_uuid()`)
-- `groupId: String` (@unique, ID grup dari WhatsApp/Baileys)
-- `createdAt: DateTime`
-- `@index([groupId])`
-- `@@schema("kainest")`
+## Update 19 Juni 2026
+- **Frontend (UI & UX Dashboard/Rekap)**:
+  - Halaman **Rekap Bulanan** (`FinancialHistoryPage.vue`) mendapat fitur *filter* dinamis (3, 6, 12, Semua rentang bulan). Kartu akordion bulan yang berjalan otomatis terbuka (*auto-expand*) saat halaman dimuat. 
+  - Membersihkan elemen statis "Rincian segera hadir" dari *Donut Chart* pemasukan, serta mengoptimalkan desain UI dengan menghilangkan label nominal (Masuk/Keluar) ganda di header daftar akordion.
+  - Perbaikan *Trend Line Chart* di Dashboard: Sistem sekarang mengagregasi data transaksi sehingga nominal di hari yang sama tergabung menjadi satu titik koordinat yang akurat.
+- **Frontend (Transaksi & Form)**:
+  - Transaksi tipe pemasukan (*Income*) kini stabil ditampilkan dengan warna Hijau dan *prefix* `+`.
+  - Memperbaiki siklus hidup (*lifecycle*) form edit transaksi (`TransactionForm.vue`) dengan menambah *watcher* pada `props.initialData`. Form kini berpindah tab (Pemasukan/Pengeluaran) secara reaktif saat mengedit transaksi berbeda.
+  - Menambal *property* `type` yang terlewat pada proses *mapping* (`TransactionEntity.js` dan `BudgetMapper.js`), memastikan komponen UI mengenali tipe transaksi dengan benar.
+  - Saat menambah/mengedit transaksi, `useBudgetStore` kini memicu sinkronisasi otomatis ke Riwayat Bulanan.
 
----
+## Update 20 Juni 2026
+- **Frontend (Profile Store)**:
+  - Memperbaiki `useProfileStore.js` agar data role dan permissions user tidak hilang (dipertahankan dari session yang sedang berjalan) saat memperbarui profil atau foto profil.
+- **Backend (Transaction & Spending Trend)**:
+  - Menyertakan include `category` saat data transaksi baru dibuat di `TransactionRepository.ts`.
+  - Melakukan agregasi (group-by tanggal) di `GetSpendingTrendUseCase.ts` untuk memastikan transaksi yang terjadi di hari yang sama terjumlah ke satu titik koordinat di diagram tren pengeluaran, sehingga tidak ada duplikasi tanggal.
+  - Memastikan properti `type` (INCOME/EXPENSE) hasil klasifikasi AI diteruskan dengan benar ke prisma create di `ProcessBotTransactionUseCase.ts`.
+- **Bot WhatsApp (Unified Message Template)**:
+  - Memperbarui template respons transaksi berhasil di `expenseUseCase.js` menjadi format tunggal yang dinamis.
+  - Template baru mendukung icon kategori dinamis di label Pocket, format waktu terstandar (`20 Juni 2026 pukul 06.33`), header/footer bervariasi yang disesuaikan secara cerdas berdasarkan tipe transaksi (Pemasukan vs Pengeluaran).
 
-## 4. SPESIFIKASI ENDPOINT & API (API SPECIFICATION)
+## Update 21 Juni 2026
+- **Frontend (Tren Keuangan)**:
+  - Mengubah tampilan grafik Tren Pengeluaran menjadi _Dual Line Chart_ (Pengeluaran berwarna Merah dan Pemasukan berwarna Hijau).
+  - Komponen Vue dan Store telah disesuaikan untuk membaca struktur balasan API baru yang memisahkan `expenseTrend` dan `incomeTrend`.
+- **Backend (API & Skema DB)**:
+  - Endpoint Tren Pengeluaran kini mem- _fetch_ data transaksi INCOME dan EXPENSE secara paralel dari database dan memisahkannya dalam respons JSON.
+  - Menambahkan kolom `botPhoneNumberStaging` ke tabel `WaBotConfig` agar bot Staging dan Production bisa menggunakan nomor WA yang berbeda tanpa saling menimpa data satu sama lain.
+  - Membalik urutan validasi grup: Jika *user* tak terdaftar mengirim pesan dari dalam grup, bot akan melakukan _silent ignore_ (tanpa balasan/reaksi sama sekali) untuk mencegah *spam*. Sapaan dasar (`hai`, `halo`) kini diproses sebagai perintah agar bot bisa merespons di grup yang belum diaktifkan.
+- **Bot WhatsApp**:
+  - `syncBotInfo` sekarang mengirimkan informasi `BOT_ENV_MODE` ke Backend saat me-*restart* koneksi, memungkinkan Backend memisahkan _update_ profil bot Staging vs Prod.
+  - Mengimplementasikan **Jeda Mengetik Universal (1.5s)** pada seluruh _outgoing message_. Selain memberi kesan natural, hal ini terbukti menyelesaikan masalah permanen di mana pesan pertama bot pasca _restart_ sering memunculkan _error_ "Waiting for this message" akibat berpacu dengan inisialisasi _E2EE Sender Key_.
 
-Semua endpoint di bawah path `/budget/`, `/profile/`, `/couple/`, dll. **diwajibkan** melewati `authMiddleware`. Satu-satunya pengecualian adalah endpoint `/auth/*`.
+## Catatan untuk Agent Selanjutnya
+1. Pastikan selalu mematuhi instruksi **Web Application Development** yang mengutamakan UI yang estetik, tidak generik, dan menggunakan animasi ringan (micro-animations).
+2. Jika ada masalah terkait rute autentikasi *Better Auth*, perhatikan versi terbarunya (khususnya perbedaan antara endpoint lama `/forget-password` dengan yang baru `/request-password-reset`).
+3. Database *Supabase* (pooler port 6543) sesekali mungkin mengalami *timeout* saat inisialisasi awal di mode *development* lokal, cukup jalankan ulang jika terjadi *error*.
+4. **Perhatian Penting**: Di sisi Backend, saat ini chat pribadi melalui Linked Devices (`@lid`) memicu error 403 ("bot belum diaktifkan di grup") karena validasi backend menganggap domain JID `@lid` memerlukan aktivasi grup. Ke depannya, validasi ini harus disesuaikan agar mengenali chat pribadi secara tepat.
+5. **Peringatan/Future Repair (Disappearing Messages di WA)**: Meskipun parameter `ephemeralExpiration` sudah diekstrak dari pesan masuk dan diteruskan ke opsi pengiriman Baileys sehingga pesan bot kini dapat terbaca dengan baik, terkadang gelembung peringatan WhatsApp *"This message won't disappear. The sender may be on an old version of WhatsApp"* masih muncul secara paralel. Investigasi lebih lanjut diperlukan (misal: memeriksa apakah format ekstraksi regex dari `JSON.stringify(msg)` ada yang kurang presisi, atau status default chat-level ephemeral di sisi client perlu diatur). Hal ini didefer untuk perbaikan di masa mendatang.
 
-### 4.1 Manajemen Kategori
-
-| Method | Endpoint | Deskripsi | Auth |
-|---|---|---|---|
-| `GET` | `/budget/categories` | Ambil daftar kategori (global + kustom milik user yang sedang login). | ✅ |
-| `POST` | `/budget/categories` | 🆕 Buat kategori kustom baru milik user. Payload: `{ name: string, icon: string }` | ✅ |
-| `PATCH` | `/budget/categories/:categoryId/keywords` | Perbarui daftar kata kunci AI untuk satu kategori. Payload: `{ keywords: string[] }` | ✅ |
-
-### 4.2 Manajemen Kantong Budget (Pockets)
-
-| Method | Endpoint | Deskripsi | Auth |
-|---|---|---|---|
-| `GET` | `/budget/pockets` | Ambil semua kantong milik user yang sedang aktif. | ✅ |
-| `PUT` | `/budget/pockets` | Buat atau perbarui satu kantong. Payload: `{ categoryId, percentage?, limitAmount? }` | ✅ |
-| `DELETE` | `/budget/pockets/:categoryId` | Hapus satu kantong. | ✅ |
-| `POST` | `/budget/pockets/setup` | Bulk setup kantong (onboarding). Payload: `{ pockets: Array<...> }` | ✅ |
-
-### 4.3 Dashboard & Ringkasan
-
-| Method | Endpoint | Deskripsi | Auth |
-|---|---|---|---|
-| `GET` | `/budget/summary` | Ambil ringkasan keuangan bulan berjalan dari `MonthlyFinancialHistory`. Jika history bulan ini belum ada, sistem akan **otomatis membuatnya (lazy loading)** dari template `BudgetPocket` user. | ✅ |
-| `GET` | `/budget/history` | 🆕 Ambil **seluruh riwayat keuangan bulanan** milik user, diurutkan dari yang terbaru. Digunakan oleh halaman Riwayat Keuangan Bulanan di frontend. | ✅ |
-| `GET` | `/budget/trend` | Data pengeluaran harian (untuk grafik). | ✅ |
-| `POST` | `/budget/setup` | Setup konfigurasi awal gaji user. | ✅ |
-
-### 4.4 Transaksi
-
-| Method | Endpoint | Deskripsi | Auth |
-|---|---|---|---|
-| `POST` | `/budget/transactions` | Catat transaksi baru. | ✅ |
-| `GET` | `/budget/transactions` | List transaksi dengan filter & pagination. | ✅ |
-| `GET` | `/budget/transactions/:id` | Detail satu transaksi. | ✅ |
-| `PUT` | `/budget/transactions/:id` | Update transaksi. | ✅ |
-| `DELETE` | `/budget/transactions/:id` | Hapus transaksi. | ✅ |
-
-### 4.5 AI & Evaluasi
-
-| Method | Endpoint | Deskripsi | Auth |
-|---|---|---|---|
-| `POST` | `/budget/classify` | Klasifikasi teks pengeluaran alami via Groq AI. Payload: `{ text: string }` | ✅ |
-| `GET` | `/budget/advisor/:categoryId` | Saran finansial AI untuk kategori tertentu. | ✅ |
-| `GET` | `/budget/status/:categoryId` | Status zona harian (Green/Yellow/Red/Overspent). | ✅ |
-| `POST` | `/budget/evaluate` | Evaluasi keuangan akhir bulan via AI. | ✅ |
 
 ---
 
-## 5. ALUR KERJA UTAMA (KEY WORKFLOWS)
+## Panduan Operasional Administrator
+### Cara Merilis "System Updates" & Notifikasi Blast
+Untuk menambahkan pembaruan sistem (*changelog*) agar muncul di Dashboard aplikasi, dan/atau mengirim notifikasi ke semua pengguna:
 
-### 5.1 Alur Lazy Loading Riwayat Bulanan
+1. **Buat Release di GitHub**:
+   - Buka repositori frontend/backend di GitHub.
+   - Pergi ke menu **Releases** lalu klik **Draft a new release**.
+   - Isi form (pilih/buat Tag baru seperti `v1.4.0`, masukkan judul fitur, dan tulis deskripsi rilis).
+2. **Berikan Keyword Blast (Opsional)**:
+   - Jika Anda **ingin mengirim notifikasi lonceng** ke semua pengguna terdaftar saat rilis ini disinkronisasi, tambahkan kata kunci `[BLAST]` di bagian mana saja pada deskripsi GitHub Anda.
+   - Jika *tidak ingin* mengirim notifikasi (hanya *silent update*), **jangan** cantumkan kata kunci tersebut.
+   - Klik **Publish release** di GitHub.
+3. **Sinkronisasi di Aplikasi Kainest**:
+   - Buka aplikasi Kainest dan *login* menggunakan akun yang memiliki *role* **Admin**.
+   - Masuk ke **Dashboard**.
+   - Pada panel *System Updates* (Kainest Changelog) di sebelah kanan, klik tombol ungu **"Sync GitHub"**.
+   - Server otomatis akan mem- *parsing* rilis baru, menyimpannya di database, dan menghapus teks `[BLAST]` tersebut agar tidak terlihat aneh di UI pengguna.
+   - Selesai! Pembaruan kini sudah terpampang di layar seluruh pengguna.
 
-Setiap kali endpoint `GET /budget/summary` dipanggil, sistem memeriksa apakah sudah ada record di `MonthlyFinancialHistory` untuk bulan berjalan. Jika belum ada:
+### Cara Mengonfigurasi Docker & Staging Safe Mode di VPS
+Karena bot Staging dan Production berjalan di atas VPS yang sama dan menggunakan berkas `.env` yang sama, gunakan fitur override environment pada berkas `docker-compose.yml` VPS Anda untuk mengisolasi perilaku masing-masing instance.
 
-```
-GET /budget/summary
-    → Cari MonthlyFinancialHistory bulan ini
-    → [Tidak ada] → Ambil BudgetPocket user + salary
-    → Hitung limitAmount dari persentase × salary
-    → Upsert record baru ke MonthlyFinancialHistory
-    → Lanjutkan kalkulasi summary dari snapshot tersebut
-```
+#### 1. Perbarui Berkas `.env` di VPS Anda
+Tambahkan/sesuaikan variabel berikut di dalam berkas `.env` global di VPS Anda:
 
-> **Efek**: Sistem otomatis "pindah bulan" tanpa cron job atau intervensi manual. History baru dibuat saat user pertama kali membuka dashboard di bulan baru.
+```env
+# ==========================================
+# 🤖 WA BOT ADVANCED CONFIGURATIONS (Staging Safe Mode)
+# ==========================================
+# Nomor WhatsApp Admin yang diperbolehkan di mode Staging (pisahkan dengan koma)
+STAGING_ALLOWED_NUMBERS="62812345678,62887654321"
 
-### 5.2 Alur Klasifikasi Transaksi AI (Kenin)
-
-```
-Input teks user ("makan bakso 15k")
-    → Ambil daftar BudgetPocket aktif user + keywords tiap kategori
-    → Bangun prompt Groq dengan konteks kantong user
-    → Kirim ke Groq LLM
-    → Validasi: apakah categoryId yang dikembalikan ada di kantong user?
-        → [Ya] → Return JSON terstruktur { categoryId, amount, note }
-        → [Tidak] → Fallback ke kategori "Lain-lain"
-```
-
-**Safeguard AI:**
-- Context limiting: LLM hanya diberi pilihan kategori dari kantong yang aktif.
-- Strict matching: Jika LLM memilih di luar daftar, sistem paksa fallback.
-- Parser nominal: `"15k"` → `15000`, `"20rb"` → `20000`, `"1jt"` → `1000000`.
-
----
-
-## 6. SISTEM LOGGING (LOGGING SPECIFICATION) 🆕
-
-### 6.1 `LoggingMiddleware.ts`
-
-Middleware global yang di-mount di `app.ts` **setelah CORS dan sebelum semua route**. Setiap HTTP request akan menghasilkan satu baris log berformat JSON.
-
-**Format Log:**
-```json
-{
-  "timestamp": "2026-05-31T13:44:17.456+07:00",
-  "level": "INFO",
-  "service": "kainest-api",
-  "event": "http_request",
-  "correlation_id": "req-a1b2c3d4",
-  "endpoint": "POST /budget/transactions",
-  "user_id": "qu4k76pZXH5nc...",
-  "status": "success",
-  "response_code": 200,
-  "latency_ms": 142,
-  "message": "Request processed successfully"
-}
+# URL Backend Terpisah
+KAINEST_API_URL_PROD="https://kainest.be.kenantomfie.site"
+KAINEST_API_URL_STAGING="https://staging.kainest.be.kenantomfie.site"
 ```
 
-**Level Mapping:**
-- `INFO` — `response_code` 1xx–3xx
-- `WARN` — `response_code` 4xx
-- `ERROR` — `response_code` 5xx
+#### 2. Perbarui Berkas `docker-compose.yml` di VPS Anda
+Sesuaikan bagian service untuk container Production (`wa-bot`) dan Staging (`wa-bot-staging`) agar menggunakan *overrides* variabel lingkungan secara terpisah:
 
-**Strategi Output:**
-- **Production (Vercel)**: Cetak ke `console.log` / `console.error` → ditangkap Vercel Log Dashboard / Log Drain.
-- **Development Lokal**: Cetak ke konsol + tulis ke file `logs/kainest_api_YYYYMMDD.log` (Daily Rotation) secara asynchronous non-blocking menggunakan `fs.promises.appendFile`.
+```yaml
+version: '3.8'
 
-> **Catatan Agent**: Folder `logs/` diabaikan oleh `.gitignore`. Jangan pernah commit file log ke repository.
+services:
+  # Instance Bot WhatsApp Production
+  wa-bot:
+    image: wa-bot:latest  # Sesuaikan dengan konfigurasi Anda
+    container_name: wa-bot-prod
+    restart: always
+    environment:
+      - PORT=3000
+      - BOT_ENV_MODE=production
+      - KAINEST_API_URL=${KAINEST_API_URL_PROD}
+    env_file:
+      - .env
+    # ... volume, port, dll.
 
----
-
-## 7. PERUBAHAN & FITUR YANG SUDAH DILAKUKAN (CHANGELOG)
-
-| # | Fitur / Perbaikan | Deskripsi Singkat |
-|---|---|---|
-| 1 | **Migrasi ke `MonthlyFinancialHistory`** | Tabel `Budget` dihapus. Sistem kini menggunakan `MonthlyFinancialHistory` sebagai snapshot bulanan yang menyimpan `pocketsSnapshot` dalam format JSON. `BudgetPocket` menjadi satu-satunya template permanen. |
-| 2 | **Lazy Loading History Bulanan** | `GetMonthlySummaryUseCase` otomatis membuat record `MonthlyFinancialHistory` baru jika bulan berganti, tanpa perlu cron job. |
-| 3 | **Kategori Kustom User** | Endpoint `POST /budget/categories` ditambahkan. User biasa dapat membuat kategori kantong sendiri (emoji + nama). Query kategori kini menggunakan `OR` logic: kategori global + milik user. |
-| 4 | **Global Structured Logging** | `LoggingMiddleware.ts` dipasang secara global. Format JSON terstruktur dengan daily log rotation untuk keperluan ETL & monitoring. |
-| 5 | **Blueprint Kantong Cepat** | `PocketManagementModal.vue` memiliki tombol blueprint (50-30-20 dan Mahasiswa Hemat) untuk konfigurasi kantong sekali klik. |
-### 2.3 Aturan & Standar Pengembangan Wajib (Untuk Agent)
-
-- **Strict Clean Architecture**: Jangan pernah memanggil Prisma Client secara langsung dari Controller. Semua I/O database harus melewati Repository.
-- **Pola Response**: Gunakan pola `success/failure` yang konsisten. Di sisi backend (Use Case), kembalikan objek dengan format `{ success: true, data: ... }` atau `{ success: false, status: number, message: string }`.
-- **Pola Either di Frontend**: Pengecekan hasil Use Case di frontend menggunakan properti `.right` (sukses) dan `.left` (gagal). **Jangan** memanggil `.isRight()` karena tidak didukung.
-
----
-
-## 3. SPESIFIKASI DATABASE (DATABASE SCHEMA)
-
-Menggunakan **PostgreSQL** (via Supabase) dengan **Prisma ORM**. Semua model berada di schema `kainest`.
-
-### 3.1 Model Utama Fitur Budgeting
-
-#### `BudgetCategory`
-Daftar kategori pengeluaran yang dapat digunakan sebagai "label" kantong.
-- `isDefault: Boolean` — `true` untuk kategori sistem (global), `false` untuk kategori kustom user.
-- `userId: String?` — `null` untuk kategori global (admin/sistem), diisi ID user untuk kategori yang dibuat user sendiri.
-- `keywords: String[]` — Kata kunci untuk klasifikasi transaksi AI (contoh: `["makan", "gofood", "warteg"]`).
-- `type: TransactionType` — Enum `INCOME` atau `EXPENSE`.
-
-> **Logika Visibilitas Kategori**: Query `findAllCategories(userId)` menggunakan `OR` logic: mengembalikan semua kategori yang `isDefault: true` **ATAU** milik `userId` tersebut. User hanya melihat kategori global + kategori kustom miliknya sendiri.
-
-#### `BudgetPocket`
-Template kantong budget permanen milik user per kategori. Ini adalah **sumber kebenaran (source of truth)** untuk konfigurasi alokasi budget user.
-- `percentage: Float?` — Alokasi sebagai persentase dari gaji (misal: `20` untuk 20%).
-- `limitAmount: Float?` — Alokasi sebagai nominal Rupiah tetap (misal: `500000`).
-- `@unique([userId, categoryId])` — Satu user hanya boleh punya satu kantong per kategori.
-
-#### `MonthlyFinancialHistory` 🆕
-Snapshot riwayat keuangan per bulan per user.
-- `period: DateTime (@db.Date)` — Tanggal awal bulan (misal: `2026-05-01`).
-- `salarySnapshot: Int` — Gaji user pada saat snapshot dibuat.
-- `totalBudgeted: Int` — Total nominal yang dialokasikan ke semua kantong bulan tersebut.
-- `totalSaved: Int` — Total nominal yang dialokasikan ke kantong tabungan/saving.
-- `totalSpent: Int` — Total pengeluaran aktual bulan tersebut (dihitung dinamis dari tabel `Transaction`).
-- `pocketsSnapshot: Json` — **Fotokopi JSON** dari semua kantong aktif user pada saat itu, berisi: `[{ categoryId, categoryName, icon, limitAmount }]`.
-- `aiEvaluation: String?` — Hasil teks evaluasi AI di akhir bulan.
-- `@unique([userId, period])` — Satu history per user per bulan.
-
-#### `Transaction`
-Catatan pengeluaran/pemasukan harian.
-- `amount: Int`, `note: String?`, `date: DateTime`, `categoryId: String`, `userId: String`.
-
-#### `AISuggestion`
-Log saran finansial yang dihasilkan oleh AI Groq.
-
-#### `BotActiveGroup` 🆕
-Menyimpan ID grup WhatsApp yang telah diaktifkan untuk bot pencatatan keuangan (Kainest WA Bot).
-- `id: String` (Primary Key, UUID, default auto-generate via database `gen_random_uuid()`)
-- `groupId: String` (@unique, ID grup dari WhatsApp/Baileys)
-- `createdAt: DateTime`
-- `@index([groupId])`
-- `@@schema("kainest")`
-
----
-
-## 4. SPESIFIKASI ENDPOINT & API (API SPECIFICATION)
-
-Semua endpoint di bawah path `/budget/`, `/profile/`, `/couple/`, dll. **diwajibkan** melewati `authMiddleware`. Satu-satunya pengecualian adalah endpoint `/auth/*`.
-
-### 4.1 Manajemen Kategori
-
-| Method | Endpoint | Deskripsi | Auth |
-|---|---|---|---|
-| `GET` | `/budget/categories` | Ambil daftar kategori (global + kustom milik user yang sedang login). | ✅ |
-| `POST` | `/budget/categories` | 🆕 Buat kategori kustom baru milik user. Payload: `{ name: string, icon: string }` | ✅ |
-| `PATCH` | `/budget/categories/:categoryId/keywords` | Perbarui daftar kata kunci AI untuk satu kategori. Payload: `{ keywords: string[] }` | ✅ |
-
-### 4.2 Manajemen Kantong Budget (Pockets)
-
-| Method | Endpoint | Deskripsi | Auth |
-|---|---|---|---|
-| `GET` | `/budget/pockets` | Ambil semua kantong milik user yang sedang aktif. | ✅ |
-| `PUT` | `/budget/pockets` | Buat atau perbarui satu kantong. Payload: `{ categoryId, percentage?, limitAmount? }` | ✅ |
-| `DELETE` | `/budget/pockets/:categoryId` | Hapus satu kantong. | ✅ |
-| `POST` | `/budget/pockets/setup` | Bulk setup kantong (onboarding). Payload: `{ pockets: Array<...> }` | ✅ |
-
-### 4.3 Dashboard & Ringkasan
-
-| Method | Endpoint | Deskripsi | Auth |
-|---|---|---|---|
-| `GET` | `/budget/summary` | Ambil ringkasan keuangan bulan berjalan dari `MonthlyFinancialHistory`. Jika history bulan ini belum ada, sistem akan **otomatis membuatnya (lazy loading)** dari template `BudgetPocket` user. | ✅ |
-| `GET` | `/budget/history` | 🆕 Ambil **seluruh riwayat keuangan bulanan** milik user, diurutkan dari yang terbaru. Digunakan oleh halaman Riwayat Keuangan Bulanan di frontend. | ✅ |
-| `GET` | `/budget/trend` | Data pengeluaran harian (untuk grafik). | ✅ |
-| `POST` | `/budget/setup` | Setup konfigurasi awal gaji user. | ✅ |
-
-### 4.4 Transaksi
-
-| Method | Endpoint | Deskripsi | Auth |
-|---|---|---|---|
-| `POST` | `/budget/transactions` | Catat transaksi baru. | ✅ |
-| `GET` | `/budget/transactions` | List transaksi dengan filter & pagination. | ✅ |
-| `GET` | `/budget/transactions/:id` | Detail satu transaksi. | ✅ |
-| `PUT` | `/budget/transactions/:id` | Update transaksi. | ✅ |
-| `DELETE` | `/budget/transactions/:id` | Hapus transaksi. | ✅ |
-
-### 4.5 AI & Evaluasi
-
-| Method | Endpoint | Deskripsi | Auth |
-|---|---|---|---|
-| `POST` | `/budget/classify` | Klasifikasi teks pengeluaran alami via Groq AI. Payload: `{ text: string }` | ✅ |
-| `GET` | `/budget/advisor/:categoryId` | Saran finansial AI untuk kategori tertentu. | ✅ |
-| `GET` | `/budget/status/:categoryId` | Status zona harian (Green/Yellow/Red/Overspent). | ✅ |
-| `POST` | `/budget/evaluate` | Evaluasi keuangan akhir bulan via AI. | ✅ |
-
----
-
-## 5. ALUR KERJA UTAMA (KEY WORKFLOWS)
-
-### 5.1 Alur Lazy Loading Riwayat Bulanan
-
-Setiap kali endpoint `GET /budget/summary` dipanggil, sistem memeriksa apakah sudah ada record di `MonthlyFinancialHistory` untuk bulan berjalan. Jika belum ada:
-
-```
-GET /budget/summary
-    → Cari MonthlyFinancialHistory bulan ini
-    → [Tidak ada] → Ambil BudgetPocket user + salary
-    → Hitung limitAmount dari persentase × salary
-    → Upsert record baru ke MonthlyFinancialHistory
-    → Lanjutkan kalkulasi summary dari snapshot tersebut
+  # Instance Bot WhatsApp Staging
+  wa-bot-staging:
+    image: wa-bot:latest  # Sesuaikan dengan konfigurasi Anda
+    container_name: wa-bot-staging
+    restart: always
+    environment:
+      - PORT=3001  # Sesuaikan port jika diekspos
+      - BOT_ENV_MODE=staging
+      - KAINEST_API_URL=${KAINEST_API_URL_STAGING}
+      - STAGING_ALLOWED_NUMBERS=${STAGING_ALLOWED_NUMBERS}
+    env_file:
+      - .env
+    # ... volume, port, dll.
 ```
 
-> **Efek**: Sistem otomatis "pindah bulan" tanpa cron job atau intervensi manual. History baru dibuat saat user pertama kali membuka dashboard di bulan baru.
+#### 3. Terapkan Perubahan & Restart Container
+Jalankan perintah ini di direktori server VPS Anda untuk menerapkan konfigurasi baru:
 
-### 5.2 Alur Klasifikasi Transaksi AI (Kenin)
-
-```
-Input teks user ("makan bakso 15k")
-    → Ambil daftar BudgetPocket aktif user + keywords tiap kategori
-    → Bangun prompt Groq dengan konteks kantong user
-    → Kirim ke Groq LLM
-    → Validasi: apakah categoryId yang dikembalikan ada di kantong user?
-        → [Ya] → Return JSON terstruktur { categoryId, amount, note }
-        → [Nicht] → Fallback ke kategori "Lain-lain"
+```bash
+docker compose down
+docker compose up -d
 ```
 
-**Safeguard AI:**
-- Context limiting: LLM hanya diberi pilihan kategori dari kantong yang aktif.
-- Strict matching: Jika LLM memilih di luar daftar, sistem paksa fallback.
-- Parser nominal: `"15k"` → `15000`, `"20rb"` → `20000`, `"1jt"` → `1000000`.
-
----
-
-## 6. SISTEM LOGGING (LOGGING SPECIFICATION) 🆕
-
-### 6.1 `LoggingMiddleware.ts`
-
-Middleware global yang di-mount di `app.ts` **setelah CORS dan sebelum semua route**. Setiap HTTP request akan menghasilkan satu baris log berformat JSON.
-
-**Format Log:**
-```json
-{
-  "timestamp": "2026-05-31T13:44:17.456+07:00",
-  "level": "INFO",
-  "service": "kainest-api",
-  "event": "http_request",
-  "correlation_id": "req-a1b2c3d4",
-  "endpoint": "POST /budget/transactions",
-  "user_id": "qu4k76pZXH5nc...",
-  "status": "success",
-  "response_code": 200,
-  "latency_ms": 142,
-  "message": "Request processed successfully"
-}
-```
-
-**Level Mapping:**
-- `INFO` — `response_code` 1xx–3xx
-- `WARN` — `response_code` 4xx
-- `ERROR` — `response_code` 5xx
-
-**Strategi Output:**
-- **Production (Vercel)**: Cetak ke `console.log` / `console.error` → ditangkap Vercel Log Dashboard / Log Drain.
-- **Development Lokal**: Cetak ke konsol + tulis ke file `logs/kainest_api_YYYYMMDD.log` (Daily Rotation) secara asynchronous non-blocking menggunakan `fs.promises.appendFile`.
-
-> **Catatan Agent**: Folder `logs/` diabaikan oleh `.gitignore`. Jangan pernah commit file log ke repository.
-
----
-
-## 7. PERUBAHAN & FITUR YANG SUDAH DILAKUKAN (CHANGELOG)
-
-| # | Fitur / Perbaikan | Deskripsi Singkat |
-|---|---|---|
-| 1 | **Migrasi ke `MonthlyFinancialHistory`** | Tabel `Budget` dihapus. Sistem kini menggunakan `MonthlyFinancialHistory` sebagai snapshot bulanan yang menyimpan `pocketsSnapshot` dalam format JSON. |
-| 2 | **Lazy Loading History Bulanan** | `GetMonthlySummaryUseCase` otomatis membuat record `MonthlyFinancialHistory` baru jika bulan berganti. |
-| 3 | **Kategori Kustom User** | Endpoint `POST /budget/categories` ditambahkan. Query menggunakan `OR` logic. |
-| 4 | **Global Structured Logging** | `LoggingMiddleware.ts` dipasang secara global dengan daily log rotation. |
-| 5 | **Blueprint Kantong Cepat** | `PocketManagementModal.vue` memiliki tombol blueprint untuk konfigurasi kantong. |
-| 6 | **Refactoring AI Use Cases** | `EvaluateMonthlyBudgetUseCase`, `GetDailyBudgetStatusUseCase` direfactor agar membaca limit dari `pocketsSnapshot` JSON. |
-| 7 | **Better Auth Alignment** | Route auth diselaraskan dengan standard endpoints Better Auth menggunakan token via URL hash. |
-| 8 | **Optimasi Serverless Vercel** | Region fungsi Vercel dikonfigurasi ke `sin1` (Singapura). |
-| 9 | **Endpoint `GET /budget/history`** | `findAllMonthlyHistory` ditambahkan untuk mengambil riwayat bulanan diurutkan `period: desc`. |
-| 10 | **Perbaikan `createCustomCategory`** | Validasi kepemilikan ditambahkan untuk mencegah injeksi `userId`. |
-| 11 | **Perbaikan Sinkronisasi Pocket** | Menerapkan `deleteMany` sebelum `upsert` untuk mencegah data kantong "zombie". |
-| 12 | **CQRS: Write-Time Sync Riwayat Bulanan** | Tabel riwayat bulanan disinkronisasi otomatis saat transaksi diubah (*Write-Time Sync*). |
-| 13 | **Perbaikan Kalkulasi Tabungan** | Kalkulasi `totalSaved` menggunakan pengeluaran riil kategori tabungan, mengecualikan nilai tersebut dari `totalSpent`. |
-| 14 | **Preservasi Data Riwayat Bulanan** | `BulkSetupPockets` tetap mempertahankan data historis `totalSaved` dan `totalSpent` saat update. |
-| 15 | **Script Migrasi & Sinkronisasi Backfill** | Utility `force-sync-pockets.ts` untuk sinkronisasi data historis (Nov 2025 - Apr 2026). |
-| 16 | **Migrasi Skema Bot WhatsApp** | Model `BotActiveGroup` didorong ke `schema.prisma` untuk manajemen bot per grup. |
-| 17 | **Restrukturisasi Notifikasi & Feedback** | `AppNotification` & `UserFeedback` menggantikan skema lama yang usang. |
-| 18 | **Fitur GitHub Sync & Changelog API** | Sinkronisasi rilis GitHub otomatis dengan deteksi tag `[BLAST]`. |
-| 19 | **Sinkronisasi Prisma: BackupTargets & ChatLogs** | Penambahan tabel `BackupTargets` & `ChatLogs` ke skema resmi untuk fitur backup chat bot. |
-| 20 | **Hapus Dead Code** | Pembersihan `supabaseClient.ts` yang tidak lagi digunakan karena 100% menggunakan Prisma. |
-| 21 | **Sinkronisasi Prisma: ApiKeys** | Penambahan tabel `ApiKeys` ke skema resmi untuk manajemen akses webhook Bot. |
-| 22 | **Isolasi Keyword Kantong** | Memindahkan logika penyimpanan `keywords` AI ke model `BudgetPocket` agar setiap pengguna dapat memiliki referensi NLP yang terisolasi, dengan *fallback* aman ke kategori. |
-| 23 | **Sort Transaksi by CreatedAt** | Perbaikan *sorting* list transaksi (`TransactionRepository`) menjadi murni berdasarkan `createdAt: 'desc'`, mengabaikan parameter `date` agar transaksi yang baru saja ditambahkan selalu berada di posisi teratas. |
-| 24 | **Pemasukan Tambahan & MoM Komprehensif** | Pemisahan stat `income` menjadi `additionalIncome` di response `totals` agar jelas bahwa tambahan di luar gaji pokok tidak memengaruhi `remaining` (Sisa Gaji Pokok). Implementasi kalkulasi MoM (Month-over-Month) komprehensif untuk field (`limit`, `spent`, `additionalIncome`, `remaining`) di `GetMonthlySummaryUseCase`. |
-
----
-
-## 8. RENCANA PENGEMBANGAN MASA DEPAN (FUTURE DEVELOPMENT)
-
-1. **Integrasi WhatsApp Bot (Kenin WA Bot)**: Pencatatan transaksi via chat WhatsApp.
-2. **Rekomendasi Rebalancing Otomatis**: AI menyarankan penyesuaian alokasi kantong berdasarkan riwayat pengeluaran.
-3. **Pipeline ETL Log**: Mengekstrak file log harian ke data warehouse untuk analisis anomali.
-4. **Pendeteksi Pengeluaran Berulang**: Analisis AI untuk mengenali transaksi langganan/berulang otomatis.
-5. **Handbook / Panduan Fitur In-App**: Endpoint untuk menyajikan panduan fitur secara dinamis.
-6. **Pembatasan Query Default Riwayat (6/12 Bulan)**: Penambahan parameter `take` pada `findAllMonthlyHistory`.
-7. **Filter Query Tahun/Bulan pada Endpoint History**: Dukungan query parameter `?year=` atau `?from=&to=` pada endpoint `GET /budget/history`.
-8. **Hybrid Parsing (Regex + AI)**: Sebelum teks transaksi dikirim ke Groq AI, tambahkan lapisan pengecekan Regex/keyword. Jika keyword dari kantong pengguna cocok 100% dengan teks input, proses langsung tanpa memanggil LLM. AI hanya dipanggil untuk teks yang ambigu/kompleks. Tujuan: hemat biaya API token dan mempercepat latency untuk input sederhana.
-9. **Sistem Antrean Transaksi (Message Queue)**: Implementasikan sistem antrean (misal: `BullMQ` atau tabel DB dengan status `PENDING`) untuk memproses transaksi dari WA Bot secara asinkron. Bot langsung mendapat "200 OK", sementara pemrosesan AI + pencatatan berjalan di background. Manfaat: anti-timeout, mendukung auto-retry jika Groq API sedang down/rate-limited.
-10. **Debouncing / Bulk Insert Pesan WA**: Terapkan jeda singkat (misal: 3 detik) di WA Bot sebelum mengirim request ke Backend, untuk menggabungkan beberapa pesan beruntun dari user yang sama menjadi satu request. AI diperintahkan merespons array JSON berisi banyak transaksi sekaligus, mengurangi jumlah pemanggilan API.
-11. **Keamanan Payload via HMAC Signature**: Gantikan autentikasi API Key statis pada endpoint `/wabot/transactions` dengan sistem HMAC Signature. WA Bot menandatangani setiap request dengan secret key, dan Backend memverifikasi tanda tangan tersebut untuk memastikan request 100% asli dari Bot internal.
