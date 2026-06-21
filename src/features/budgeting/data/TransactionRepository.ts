@@ -7,6 +7,7 @@ type CreateTransactionData = {
   note?: string;
   date: Date;
   categoryId: string;
+  type?: "INCOME" | "EXPENSE"; // 🆕 Default EXPENSE
 };
 
 export const transactionRepository = {
@@ -21,7 +22,9 @@ export const transactionRepository = {
         date: data.date,
         categoryId: data.categoryId,
         userId: userId,
+        type: data.type || "EXPENSE", // 🆕 default EXPENSE aman untuk data lama
       },
+      include: { category: true },
     });
   },
 
@@ -76,6 +79,7 @@ export const transactionRepository = {
     startDate,
     endDate,
     search,
+    type,
     skip,
     take,
   }: {
@@ -83,6 +87,7 @@ export const transactionRepository = {
     startDate?: Date;
     endDate?: Date;
     search?: string;
+    type?: "INCOME" | "EXPENSE" | "ALL";
     skip: number;
     take: number;
   }) {
@@ -97,6 +102,10 @@ export const transactionRepository = {
         gte: startDate,
         lte: endDate,
       };
+    }
+
+    if (type && type !== "ALL") {
+      whereClause.type = type;
     }
 
     // Filter Search (Case Insensitive)
@@ -126,9 +135,7 @@ export const transactionRepository = {
         where: whereClause,
         skip: skip, // Loncat sekian data (offset)
         take: take, // Ambil sekian data (limit)
-        orderBy: {
-          date: "desc", // Urutkan dari yang paling baru
-        },
+        orderBy: { createdAt: "desc" }, // Murni urut berdasarkan waktu input ke sistem
         // Include data kategori agar di UI bisa tampil ikon dan namanya
         include: {
           category: {
@@ -167,7 +174,7 @@ export const transactionRepository = {
    */
   async updateTransaction(
     id: string,
-    data: { amount?: number; categoryId?: string; note?: string; date?: Date }
+    data: Prisma.TransactionUpdateInput
   ) {
     return prisma.transaction.update({
       where: { id: id },

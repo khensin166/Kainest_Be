@@ -2,29 +2,19 @@ import { budgetRepository } from "../../data/BudgetRepository.js";
 import { pocketRepository } from "../../data/PocketRepository.js";
 export const getMonthlySummaryUseCase = async (userId) => {
     try {
-        // 1. Tentukan Range Tanggal (Bulan Ini)
-        // KODE BARU (Konsisten UTC di manapun)
+        // 1. Tentukan Range Tanggal (Bulan Ini) - Konsisten UTC
         const now = new Date();
-        // 1. startDate: Gunakan Date.UTC untuk memaksa jam 00:00:00 UTC persis
         const startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-        // 2. endDate: Ambil awal bulan depan UTC, lalu kurangi 1 milidetik
         const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-        const endDate = new Date(nextMonthStart.getTime() - 1); // Ini akan jadi tgl terakhir bulan ini jam 23:59:59.999 UTC
-        // LOG CCTV (Untuk memastikan hasilnya konsisten 00:00:00Z di Vercel nanti)
-        console.log("=================[DEBUG SUMMARY UTC FIX]=================");
-        console.log(`📅 Periode (UTC Forced): ${startDate.toISOString()} s/d ${endDate.toISOString()}`);
-        // 🔥 CCTV 1: Cek User ID dan Periode Tanggal
-        console.log("=================[DEBUG SUMMARY]=================");
-        console.log(`👤 User ID: ${userId}`);
-        console.log(`📅 Periode: ${startDate.toISOString()} s/d ${endDate.toISOString()}`);
+        const endDate = new Date(nextMonthStart.getTime() - 1);
+        // 🆕 Bulan lalu untuk kalkulasi MoM (Month-over-Month)
+        const prevMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
         // 2. Ambil History Bulanan
         let history = await budgetRepository.findMonthlyHistory(userId, startDate);
         const user = await budgetRepository.findUserById(userId);
         const salary = user?.salary || 0;
-        // 🔥 LAZY LOADING: Jika history bulan ini belum ada, kita buatkan otomatis 
-        // berdasarkan blueprint/Pocket yang ada. (Otomatis pindah bulan!)
+        // 🔥 LAZY LOADING: Jika history bulan ini belum ada, buat otomatis
         if (!history && salary > 0) {
-            console.log(`🔄 [LAZY LOAD] Membuat history baru untuk bulan ${startDate.toISOString()}`);
             const pockets = await pocketRepository.findPocketsByUser(userId);
             const categories = await budgetRepository.findAllCategories(userId);
             let totalBudgeted = 0;
@@ -47,7 +37,6 @@ export const getMonthlySummaryUseCase = async (userId) => {
                     limitAmount: amountLimit,
                 };
             });
-            // Simpan history baru
             history = await budgetRepository.upsertMonthlyHistory(userId, startDate, {
                 salarySnapshot: salary,
                 totalBudgeted: totalBudgeted,
@@ -70,12 +59,10 @@ export const getMonthlySummaryUseCase = async (userId) => {
                 pocketsSnapshot = history.pocketsSnapshot;
             }
         }
-        // 3. Ambil Realisasi Pengeluaran (Group By Category)
-        // Hasil: [{ categoryId: 'xxx', _sum: { amount: 50000 } }, ...]
+        // 3. Ambil Realisasi Pengeluaran (hanya EXPENSE)
         const expenses = await budgetRepository.getMonthlyExpenseGrouped(userId, startDate, endDate);
         // 4. Gabungkan Data (Merge Snapshot + Expense)
         const summary = pocketsSnapshot.map((pocket) => {
-            // Cari pengeluaran yang cocok dengan kategori ini
             const expense = expenses.find((e) => e.categoryId === pocket.categoryId);
             const spent = expense?._sum.amount || 0;
             const amountLimit = pocket.limitAmount || 0;
@@ -95,11 +82,23 @@ export const getMonthlySummaryUseCase = async (userId) => {
         // 5. Hitung Total Keseluruhan
         const totalLimit = summary.reduce((acc, curr) => acc + curr.limit, 0);
         const totalSpent = summary.reduce((acc, curr) => acc + curr.spent, 0);
-        const unallocated = Math.max(0, salary - totalLimit); // Uang yang belum masuk ke kantong manapun
+        const totalIncome = history?.totalIncome || 0;
+        const unallocated = Math.max(0, salary - totalLimit);
+        // 🆕 6. Kalkulasi MoM (Month-over-Month) secara dinamis - TANPA kolom database baru
+        const prevHistory = await budgetRepository.findMonthlyHistory(userId, prevMonthStart);
+        const prevSpent = prevHistory?.totalSpent || 0;
+        const prevIncome = prevHistory?.totalIncome || 0;
+        // momSpent: positif = naik (lebih boros), negatif = turun (lebih hemat), null = tidak ada data bulan lalu
+        const momSpent = prevSpent > 0
+            ? Math.round(((totalSpent - prevSpent) / prevSpent) * 100)
+            : null;
+        const momIncome = prevIncome > 0
+            ? Math.round(((totalIncome - prevIncome) / prevIncome) * 100)
+            : null;
         return {
             success: true,
             data: {
-                salary: salary, // Penting untuk cek apakah user sudah input gaji!
+                salary: salary,
                 month: startDate.toLocaleString("default", {
                     month: "long",
                     year: "numeric",
@@ -107,8 +106,14 @@ export const getMonthlySummaryUseCase = async (userId) => {
                 totals: {
                     limit: totalLimit,
                     spent: totalSpent,
+                    income: totalIncome,
                     remaining: totalLimit - totalSpent,
-                    unallocated: unallocated, // Selisih gaji - total limit kantong
+                    unallocated: unallocated,
+                    // 🆕 Perbandingan vs bulan lalu (null jika tidak ada data historis)
+                    mom: {
+                        spent: momSpent,
+                        income: momIncome,
+                    }
                 },
                 categories: summary,
             },

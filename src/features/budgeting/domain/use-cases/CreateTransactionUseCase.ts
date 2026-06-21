@@ -1,5 +1,6 @@
 import { transactionRepository } from "../../data/TransactionRepository.js";
 import { budgetRepository } from "../../data/BudgetRepository.js";
+import { TransactionType } from "@prisma/client";
 
 type InputData = {
   userId: string;
@@ -7,6 +8,7 @@ type InputData = {
   categoryId: string;
   note?: string;
   date?: string; // string dari JSON (ISO 8601)
+  type?: "INCOME" | "EXPENSE"; // 🆕 Default EXPENSE jika tidak disertakan
 };
 
 export const createTransactionUseCase = async (data: InputData) => {
@@ -25,6 +27,7 @@ export const createTransactionUseCase = async (data: InputData) => {
       categoryId: data.categoryId,
       note: data.note,
       date: txDate,
+      type: (data.type === "INCOME" ? "INCOME" : "EXPENSE") as TransactionType,
     });
 
     // Write-Time Sync untuk riwayat bulanan

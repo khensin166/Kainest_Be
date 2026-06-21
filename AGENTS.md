@@ -464,6 +464,8 @@ Middleware global yang di-mount di `app.ts` **setelah CORS dan sebelum semua rou
 | 20 | **Hapus Dead Code** | Pembersihan `supabaseClient.ts` yang tidak lagi digunakan karena 100% menggunakan Prisma. |
 | 21 | **Sinkronisasi Prisma: ApiKeys** | Penambahan tabel `ApiKeys` ke skema resmi untuk manajemen akses webhook Bot. |
 | 22 | **Isolasi Keyword Kantong** | Memindahkan logika penyimpanan `keywords` AI ke model `BudgetPocket` agar setiap pengguna dapat memiliki referensi NLP yang terisolasi, dengan *fallback* aman ke kategori. |
+| 23 | **Sort Transaksi by CreatedAt** | Perbaikan *sorting* list transaksi (`TransactionRepository`) menjadi murni berdasarkan `createdAt: 'desc'`, mengabaikan parameter `date` agar transaksi yang baru saja ditambahkan selalu berada di posisi teratas. |
+| 24 | **Pemasukan Tambahan & MoM Komprehensif** | Pemisahan stat `income` menjadi `additionalIncome` di response `totals` agar jelas bahwa tambahan di luar gaji pokok tidak memengaruhi `remaining` (Sisa Gaji Pokok). Implementasi kalkulasi MoM (Month-over-Month) komprehensif untuk field (`limit`, `spent`, `additionalIncome`, `remaining`) di `GetMonthlySummaryUseCase`. |
 
 ---
 
@@ -476,4 +478,7 @@ Middleware global yang di-mount di `app.ts` **setelah CORS dan sebelum semua rou
 5. **Handbook / Panduan Fitur In-App**: Endpoint untuk menyajikan panduan fitur secara dinamis.
 6. **Pembatasan Query Default Riwayat (6/12 Bulan)**: Penambahan parameter `take` pada `findAllMonthlyHistory`.
 7. **Filter Query Tahun/Bulan pada Endpoint History**: Dukungan query parameter `?year=` atau `?from=&to=` pada endpoint `GET /budget/history`.
-8. **Pemisahan Keywords Kantong per User**: Migrasi `keywords` dari `BudgetCategory` ke `BudgetPocket` agar unik per user.
+8. **Hybrid Parsing (Regex + AI)**: Sebelum teks transaksi dikirim ke Groq AI, tambahkan lapisan pengecekan Regex/keyword. Jika keyword dari kantong pengguna cocok 100% dengan teks input, proses langsung tanpa memanggil LLM. AI hanya dipanggil untuk teks yang ambigu/kompleks. Tujuan: hemat biaya API token dan mempercepat latency untuk input sederhana.
+9. **Sistem Antrean Transaksi (Message Queue)**: Implementasikan sistem antrean (misal: `BullMQ` atau tabel DB dengan status `PENDING`) untuk memproses transaksi dari WA Bot secara asinkron. Bot langsung mendapat "200 OK", sementara pemrosesan AI + pencatatan berjalan di background. Manfaat: anti-timeout, mendukung auto-retry jika Groq API sedang down/rate-limited.
+10. **Debouncing / Bulk Insert Pesan WA**: Terapkan jeda singkat (misal: 3 detik) di WA Bot sebelum mengirim request ke Backend, untuk menggabungkan beberapa pesan beruntun dari user yang sama menjadi satu request. AI diperintahkan merespons array JSON berisi banyak transaksi sekaligus, mengurangi jumlah pemanggilan API.
+11. **Keamanan Payload via HMAC Signature**: Gantikan autentikasi API Key statis pada endpoint `/wabot/transactions` dengan sistem HMAC Signature. WA Bot menandatangani setiap request dengan secret key, dan Backend memverifikasi tanda tangan tersebut untuk memastikan request 100% asli dari Bot internal.

@@ -151,6 +151,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     categoryId: classification.categoryId,
     note: classification.note || data.text,
     date: txDate,
+    type: classification.type, // ✅ Teruskan tipe INCOME/EXPENSE dari hasil klasifikasi AI
   });
 
   if (!createResult.success) {

@@ -260,6 +260,7 @@ model MonthlyFinancialHistory {
   totalBudgeted   Int      // Total nilai uang yang dialokasikan ke kantong
   totalSaved      Int      // Total nilai uang yang dialokasikan khusus ke "Tabungan"
   totalSpent      Int      @default(0) // Total pengeluaran bulan ini
+  totalIncome     Int      @default(0) // Total pemasukan tambahan bulan ini (di luar gaji)
   
   // Rincian Kantong (Disimpan sebagai teks JSON)
   pocketsSnapshot Json     
@@ -299,10 +300,11 @@ model BudgetPocket {
 // 3. Transaksi Harian
 
 model Transaction {
-  id     String   @id @default(uuid())
+  id     String          @id @default(uuid())
   amount Int
   note   String?
-  date   DateTime // Tanggal transaksi terjadi
+  date   DateTime        // Tanggal transaksi terjadi
+  type   TransactionType @default(EXPENSE) // INCOME atau EXPENSE (data lama = EXPENSE)
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -313,6 +315,7 @@ model Transaction {
   createdAt DateTime @default(now())
 
   @@index([userId, date])
+  @@index([userId, type]) // Index baru untuk filter INCOME/EXPENSE
   @@index([categoryId])
   @@schema("kainest")
 }

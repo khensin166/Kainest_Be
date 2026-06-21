@@ -12,6 +12,7 @@ export const transactionRepository = {
                 date: data.date,
                 categoryId: data.categoryId,
                 userId: userId,
+                type: data.type || "EXPENSE", // 🆕 default EXPENSE aman untuk data lama
             },
         });
     },
