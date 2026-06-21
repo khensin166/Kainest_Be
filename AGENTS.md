@@ -68,6 +68,7 @@
   - Endpoint Tren Pengeluaran kini mem- _fetch_ data transaksi INCOME dan EXPENSE secara paralel dari database dan memisahkannya dalam respons JSON.
   - Menambahkan kolom `botPhoneNumberStaging` ke tabel `WaBotConfig` agar bot Staging dan Production bisa menggunakan nomor WA yang berbeda tanpa saling menimpa data satu sama lain.
   - Membalik urutan validasi grup: Jika *user* tak terdaftar mengirim pesan dari dalam grup, bot akan melakukan _silent ignore_ (tanpa balasan/reaksi sama sekali) untuk mencegah *spam*. Sapaan dasar (`hai`, `halo`) kini diproses sebagai perintah agar bot bisa merespons di grup yang belum diaktifkan.
+  - Memperbaiki fitur sinkronisasi *System Updates* dari GitHub. Mengatasi *delay cache* endpoint `/releases` GitHub dengan cara memanggil `/releases/latest` secara paralel dan menggabungkan hasilnya tanpa duplikasi, sehingga rilis yang baru saja dipublikasikan bisa langsung terdeteksi.
 - **Bot WhatsApp**:
   - `syncBotInfo` sekarang mengirimkan informasi `BOT_ENV_MODE` ke Backend saat me-*restart* koneksi, memungkinkan Backend memisahkan _update_ profil bot Staging vs Prod.
   - Mengimplementasikan **Jeda Mengetik Universal (1.5s)** pada seluruh _outgoing message_. Selain memberi kesan natural, hal ini terbukti menyelesaikan masalah permanen di mana pesan pertama bot pasca _restart_ sering memunculkan _error_ "Waiting for this message" akibat berpacu dengan inisialisasi _E2EE Sender Key_.
