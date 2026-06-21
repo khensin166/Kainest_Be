@@ -37,7 +37,7 @@ export const transactionRepository = {
         });
         return aggregate._sum.amount || 0;
     },
-    async getDailyTrend(userId, startDate, endDate) {
+    async getDailyTrend(userId, startDate, endDate, type) {
         return prisma.transaction.groupBy({
             by: ["date"], // Kelompokkan berdasarkan kolom tanggal
             _sum: {
@@ -49,6 +49,8 @@ export const transactionRepository = {
                     gte: startDate,
                     lte: endDate,
                 },
+                // Filter berdasarkan tipe jika diberikan
+                ...(type ? { type } : {}),
             },
             orderBy: {
                 date: "asc", // Urutkan dari tanggal awal bulan

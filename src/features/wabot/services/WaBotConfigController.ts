@@ -48,7 +48,18 @@ export const saveBotInfoController = async (c: Context) => {
       return c.json({ success: false, message: "WaBotConfig is empty. Please save config first." }, 400);
     }
 
-    const updated = await m.waBotConfigRepository.updateBotPhoneNumber(firstConfig.userId, body.botPhoneNumber);
+    // Pisahkan update nomor berdasarkan envMode bot.
+    // Staging tidak akan menimpa nomor Production dan sebaliknya.
+    const envMode = body.envMode || "production";
+    let updated;
+    if (envMode === "staging") {
+      updated = await m.waBotConfigRepository.updateBotPhoneNumberStaging(firstConfig.userId, body.botPhoneNumber);
+      console.log(`[WaBotConfig] Updated STAGING phone: ${body.botPhoneNumber}`);
+    } else {
+      updated = await m.waBotConfigRepository.updateBotPhoneNumber(firstConfig.userId, body.botPhoneNumber);
+      console.log(`[WaBotConfig] Updated PRODUCTION phone: ${body.botPhoneNumber}`);
+    }
+
     return c.json({ success: true, data: updated });
   } catch (error) {
     console.error("saveBotInfoController Error:", error);

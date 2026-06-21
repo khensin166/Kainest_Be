@@ -41,15 +41,11 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   const textMsg = data.text.trim();
   const lowerText = textMsg.toLowerCase();
 
-  // 2. Intercept perintah !link (prioritas utama, bisa dari personal maupun grup)
-  // (lanjut ke blok !link di bawah)
-
-  // 3. Pembersihan Sender
-  // Contoh sender: 62812345678@s.whatsapp.net atau 172662131298437@lid
+  // 2. Pembersihan Sender
   const rawSender = data.sender;
   let cleanSender = rawSender.replace("@s.whatsapp.net", "").replace("@c.us", "").replace("@lid", "");
 
-  // 3. Intercept Perintah !link (tanpa perlu grup aktif)
+  // 3. Intercept Perintah !link (prioritas utama, tanpa perlu cek user/grup)
   if (lowerText.startsWith("!link ")) {
     const code = textMsg.split(" ")[1];
     if (!code) {
@@ -73,7 +69,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     };
   }
 
-  // 5. Intercept Perintah !aktifkan-kainest (harus dari grup)
+  // 4. Intercept Perintah !aktifkan-kainest (harus dari grup)
   if (lowerText === "!aktifkan-kainest") {
     if (!data.groupId) {
       return {
@@ -97,35 +93,46 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     };
   }
 
-  // 6. Validasi Group (Jika pesan reguler dari grup yang belum aktif)
-  if (data.groupId) {
-    const activeGroup = await botTransactionRepository.getActiveGroup(data.groupId);
-    if (!activeGroup) {
-      return {
-        success: false,
-        status: 403,
-        message: "⚠️ Bot belum diaktifkan di grup ini. Ketik *!aktifkan-kainest* terlebih dahulu ya!",
-      };
-    }
-  }
+  // 5. Deteksi pesan sapaan dasar
+  const isGreeting = ["hai", "halo", "hallo", "hello", "p", "ping"].includes(lowerText.trim());
 
-  // 7. Universal Fallback: Jika dari chat PERSONAL dan nomor belum terdaftar
+  // 6. Cek apakah pengirim sudah terdaftar di Kainest
   const user = await botTransactionRepository.getUserByPhoneNumber(cleanSender);
+
   if (!user) {
-    // Jika dari grup, beri pesan pendek
+    // Jika dari grup dan user tidak terdaftar → DIAM TOTAL (tidak spam grup)
     if (data.groupId) {
-      return {
-        success: false,
-        status: 404,
-        message: `❓ Nomor kamu belum tertaut ke akun Kainest. Chat personal bot dan ketik *!link KODE_UNIK_KAMU* terlebih dahulu ya!`,
-      };
+      return { success: false, status: 404, isIgnored: true };
     }
-    // Jika dari personal (nomor belum terdaftar) -> kirim ONBOARDING
+    // Jika dari personal → kirim ONBOARDING
     return {
       success: true,
       data: {
         message: ONBOARDING_MESSAGE,
         sendKicawSticker: true,
+      },
+    };
+  }
+
+  // 7. Validasi Grup Aktif (user sudah terdaftar, tapi grup belum diaktifkan)
+  if (data.groupId) {
+    const activeGroup = await botTransactionRepository.getActiveGroup(data.groupId);
+    if (!activeGroup) {
+      // Balas hanya jika user terdaftar dan pesan adalah sapaan atau transaksi nyata
+      return {
+        success: false,
+        status: 403,
+        message: `👋 Halo, ${user.name || "Kak"}! Sebelum mulai mencatat, aktifkan dulu bot di grup ini ya!\n\nKetik:\n  \`!aktifkan-kainest\``,
+      };
+    }
+  }
+
+  // 8. Jika sapaan dan grup sudah aktif → balas sambutan singkat
+  if (isGreeting) {
+    return {
+      success: true,
+      data: {
+        message: `Halo, ${user.name || "Kak"}! 👋 Siap mencatat keuanganmu hari ini!\n\nLangsung ketik transaksimu ya, contoh:\n*Makan siang 20k* atau *Bensin 50rb* 😊`,
       },
     };
   }
