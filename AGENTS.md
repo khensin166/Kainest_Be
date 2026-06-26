@@ -73,6 +73,11 @@
   - `syncBotInfo` sekarang mengirimkan informasi `BOT_ENV_MODE` ke Backend saat me-*restart* koneksi, memungkinkan Backend memisahkan _update_ profil bot Staging vs Prod.
   - Mengimplementasikan **Jeda Mengetik Universal (1.5s)** pada seluruh _outgoing message_. Selain memberi kesan natural, hal ini terbukti menyelesaikan masalah permanen di mana pesan pertama bot pasca _restart_ sering memunculkan _error_ "Waiting for this message" akibat berpacu dengan inisialisasi _E2EE Sender Key_.
 
+## Update 27 Juni 2026
+- **Bot WhatsApp (Auto-Restart QR Code)**:
+  - Memperbaiki bug di mana bot tidak memunculkan QR Code baru di web setelah pengguna melakukan *logout* (keluar dari perangkat tertaut di HP).
+  - Kini, ketika sesi terputus dengan alasan `loggedOut`, sistem akan secara fisik menghapus folder kredensial `baileys_auth_info` dan melakukan *auto-restart* sesi dalam 3 detik, sehingga QR Code baru otomatis ter- *generate* dan dikirimkan kembali ke Frontend.
+
 ## Catatan untuk Agent Selanjutnya
 1. Pastikan selalu mematuhi instruksi **Web Application Development** yang mengutamakan UI yang estetik, tidak generik, dan menggunakan animasi ringan (micro-animations).
 2. Jika ada masalah terkait rute autentikasi *Better Auth*, perhatikan versi terbarunya (khususnya perbedaan antara endpoint lama `/forget-password` dengan yang baru `/request-password-reset`).
