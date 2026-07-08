@@ -2,7 +2,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies required for Prisma and native extensions
+# Install dependencies required for Prisma and native extensions 
 RUN apk add --no-cache openssl
 
 # Copy package files
