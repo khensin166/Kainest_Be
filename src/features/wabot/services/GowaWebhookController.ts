@@ -110,6 +110,10 @@ export const gowaWebhookController = async (c: Context) => {
     const textBody: string = data.body || payload.text || payload.message || "";
     const isFromMe: boolean = data.is_from_me || payload.is_from_me || payload.IsFromMe || false;
 
+    // Deteksi Voice Note (Audio)
+    const isAudio = !!data.audio || data.original_media_type === "audio" || data.type === "audio" || !!data.video_note;
+    const hasText = !!textBody && textBody.trim().length > 0;
+
     // Normalkan nomor telepon (hilangkan suffix WA dan kode negara prefix 0)
     senderPhone = senderRaw
       .replace("@s.whatsapp.net", "")
@@ -143,9 +147,9 @@ export const gowaWebhookController = async (c: Context) => {
       return c.json({ success: true, ignored: true, reason: "non-message event" });
     }
 
-    // 4. Abaikan pesan kosong (stiker/gambar tanpa caption) — setelah event check
-    if (!textBody || !textBody.trim()) {
-      logger.info("Ignored empty message body", { sender: senderPhone });
+    // 4. Abaikan pesan kosong (stiker/gambar tanpa caption) jika bukan pesan audio
+    if (!hasText && !isAudio) {
+      logger.info("Ignored empty message body and non-audio", { sender: senderPhone });
       return c.json({ success: true, ignored: true, reason: "empty body" });
     }
 
@@ -158,8 +162,8 @@ export const gowaWebhookController = async (c: Context) => {
         logger.info("Staging: silent ignore (not allowed number)", { sender: senderPhone });
         return c.json({ success: true, ignored: true, reason: "staging_not_allowed" });
       }
-      // Lepas prefix !dev jika ada
-      if (!textBody.toLowerCase().startsWith("!dev ")) {
+      // Lepas prefix !dev jika ada (pengecualian untuk pesan audio karena tidak bisa diberi prefix teks)
+      if (!isAudio && !textBody.toLowerCase().startsWith("!dev ")) {
         logger.info("Staging: silent ignore (missing !dev prefix)", { sender: senderPhone });
         return c.json({ success: true, ignored: true, reason: "staging_missing_prefix" });
       }
@@ -177,13 +181,47 @@ export const gowaWebhookController = async (c: Context) => {
         }
 
         // 7. Proses pesan menggunakan logic backend yang sudah ada
-        const processedText = BOT_ENV_MODE === "staging"
-          ? textBody.slice("!dev ".length).trim()
-          : textBody;
+        let processedText = textBody;
+        if (BOT_ENV_MODE === "staging" && !isAudio) {
+          processedText = textBody.slice("!dev ".length).trim();
+        }
 
-        const result = await processBotTransactionUseCase({
-          type: "text",
+        let type = "text";
+        let audioBuffer: Buffer | undefined;
+
+        if (isAudio) {
+          type = "audio";
+          try {
+            // Gunakan API GOWA untuk mendownload media
+            const downloadUrl = `${GOWA_BASE_URL}/message/${messageId}/download`;
+            const resp = await fetch(downloadUrl, {
+              headers: {
+                "X-Device-Id": GOWA_DEVICE_ID,
+                ...(GOWA_API_KEY ? { Authorization: `Basic ${GOWA_API_KEY}` } : {}),
+              }
+            });
+            if (resp.ok) {
+              const resJson = await resp.json();
+              if (resJson.data && resJson.data.url) {
+                // Fetch dari URL public yang diberikan GOWA
+                const fileResp = await fetch(resJson.data.url);
+                if (fileResp.ok) {
+                  const arrayBuffer = await fileResp.arrayBuffer();
+                  audioBuffer = Buffer.from(arrayBuffer);
+                }
+              }
+            } else {
+              logger.warn("Failed to download media from GOWA", { status: resp.status, text: await resp.text() });
+            }
+          } catch (e: any) {
+            logger.error("Error downloading audio", { error: e.message });
+          }
+        }
+
+        const result: any = await processBotTransactionUseCase({
+          type,
           text: processedText,
+          audioBuffer,
           sender: senderRaw,
           groupId,
           timestamp, // ✅ RFC3339 GOWA v8.9
@@ -202,7 +240,7 @@ export const gowaWebhookController = async (c: Context) => {
           return; // Selesai
         }
 
-        // 9. Tangani hasil: gagal (bukan transaksi / nominal 0)
+        // 9. Tangani hasil: gagal (bukan transaksi / nominal 0 / user belum terdaftar)
         if (!result.success) {
           logger.warn("processBotTransaction rejected", {
             sender: senderRaw,
@@ -212,18 +250,28 @@ export const gowaWebhookController = async (c: Context) => {
             latency_ms: latencyMs,
           });
 
-          // HANYA kirim reaksi ❓ (Tanda tanya / Tidak mengerti), TIDAK balas teks error
+          // Kirim reaksi dinamis (default: ❓ untuk gagal biasa, ⚠️ untuk peringatan)
           const replyTarget = groupId || `${senderPhone}@s.whatsapp.net`;
-          if (messageId) await sendReactionViaGowa(replyTarget, messageId, "❓").catch(() => {});
+          const failReaction = result.reaction || "❓";
+          if (messageId) await sendReactionViaGowa(replyTarget, messageId, failReaction).catch(() => {});
           
+          // Izinkan membalas teks JIKA flag replyText = true (contoh: pesan peringatan grup belum daftar)
+          if (result.replyText && result.message) {
+            await sendPresenceViaGowa(replyTarget, "start").catch(() => {});
+            await new Promise((r) => setTimeout(r, 1500));
+            await sendTextViaGowa(replyTarget, result.message).catch(() => {});
+          }
+
           return; // Selesai
         }
 
-        // 10. Sukses — kirim reaksi ✅ dan teks balasan
+        // 10. Sukses — kirim reaksi ✅ (atau reaksi custom dari usecase, misal 👀) dan teks balasan
         const replyTarget = groupId || `${senderPhone}@s.whatsapp.net`;
-        if (messageId) await sendReactionViaGowa(replyTarget, messageId, "✅").catch(() => {});
+        const successReaction = result.reaction || "✅";
+        if (messageId) await sendReactionViaGowa(replyTarget, messageId, successReaction).catch(() => {});
 
-        if (result.data?.message) {
+        // Jika ada balasan pesan dan (bukan karena sapaan kosong, atau jika dipaksa replyText)
+        if (result.data?.message && (!result.isIgnored || result.replyText)) {
           // Universal Typing Delay (1.5s) Anti-Banned & E2EE Fix
           await sendPresenceViaGowa(replyTarget, "start").catch(() => {});
           await new Promise((r) => setTimeout(r, 1500));

@@ -89,13 +89,23 @@ export const budgetRepository = {
                     where: { userId },
                     include: { category: true }
                 });
-                const pocketsSnapshot = activePockets.map(p => ({
-                    categoryId: p.categoryId,
-                    categoryName: p.category.name,
-                    limitAmount: p.limitAmount || 0,
-                    icon: p.category.icon || '💰',
-                    spent: 0
-                }));
+                const salary = user.salary || 0;
+                // [FIX: Pocket Rollover] Jika kantong menggunakan persentase, hitung ulang limitAmount
+                // dari gaji user saat ini. Sebelumnya, jika kantong diset dengan percentage,
+                // limitAmount-nya bisa 0 sehingga template bulan baru terlihat kosong.
+                const pocketsSnapshot = activePockets.map(p => {
+                    let limitAmount = p.limitAmount || 0;
+                    if (p.percentage != null && p.percentage > 0 && salary > 0) {
+                        limitAmount = Math.floor((p.percentage / 100) * salary);
+                    }
+                    return {
+                        categoryId: p.categoryId,
+                        categoryName: p.category.name,
+                        limitAmount,
+                        icon: p.category.icon || '💰',
+                        spent: 0
+                    };
+                });
                 let totalBudgeted = pocketsSnapshot.reduce((acc, p) => acc + p.limitAmount, 0);
                 let totalSaved = 0;
                 const savingPocket = pocketsSnapshot.find(p => p.categoryName.toLowerCase().includes('tabungan') || p.categoryName.toLowerCase().includes('saving'));

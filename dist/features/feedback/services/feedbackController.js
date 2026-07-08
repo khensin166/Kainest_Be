@@ -1,11 +1,12 @@
 import { prisma } from "../../../infrastructure/database/prisma.js";
+import { logger } from "../../../infrastructure/logger/logger.js";
 /**
  * GET /feedbacks
  * Ambil semua feedback yang isVisible = true, untuk ditampilkan di Dashboard.
  */
 export async function getFeedbacksController(c) {
     try {
-        const limit = Number(c.req.query("limit") ?? 10);
+        const limit = Number(c.req.query("limit") ?? 50);
         const feedbacks = await prisma.userFeedback.findMany({
             where: { isVisible: true },
             orderBy: { createdAt: "desc" },
@@ -23,7 +24,7 @@ export async function getFeedbacksController(c) {
         return c.json({ feedbacks });
     }
     catch (error) {
-        console.error("[Feedback] Error fetching:", error);
+        logger.error("[Feedback] Error fetching:", { error: error.message });
         return c.json({ error: "Gagal mengambil feedback" }, 500);
     }
 }

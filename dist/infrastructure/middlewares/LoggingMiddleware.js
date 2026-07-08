@@ -1,5 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
+import { asyncContext } from "../logger/asyncContext.js";
+import { logger } from "../logger/logger.js";
 // =========================================
 // 🌿 Konfigurasi
 // =========================================
@@ -64,8 +66,13 @@ export const loggingMiddleware = async (c, next) => {
         `req-${crypto.randomUUID().slice(0, 8)}`;
     // Simpan correlation ID di context agar bisa dipakai di controller
     c.set("correlationId", correlationId);
-    // Tunggu proses route/controller selesai
-    await next();
+    // Buat store baru untuk request ini
+    const store = new Map();
+    store.set("traceId", correlationId);
+    // Jalankan handler berikutnya di dalam context
+    await asyncContext.run(store, async () => {
+        await next();
+    });
     // Hitung latency
     const latencyMs = Date.now() - startTime;
     const responseCode = c.res.status;
@@ -90,14 +97,19 @@ export const loggingMiddleware = async (c, next) => {
             ? "Request processed successfully"
             : `Request failed with status ${responseCode}`,
     };
-    // Selalu cetak ke konsol (akan ditangkap oleh Vercel Log Drain / PM2 / Docker logs)
+    // Hapus console.log native, gunakan Winston logger
+    const { message, ...meta } = logEntry;
     if (level === "ERROR") {
-        console.error(JSON.stringify(logEntry));
+        logger.error(message, meta);
+    }
+    else if (level === "WARN") {
+        logger.warn(message, meta);
     }
     else {
-        console.log(JSON.stringify(logEntry));
+        logger.info(message, meta);
     }
-    // Hanya di lokal: tulis ke file harian secara async
+    // Hanya di lokal: tulis ke file harian (sudah dihandle oleh file logger di winston jika dikonfigurasi, 
+    // tapi kita pertahankan fungsi writeToFile bawaan ini jika memang dibutuhkan khusus lokal).
     if (IS_LOCAL) {
         writeToFile(logEntry); // Sengaja tidak di-await agar tidak delay response
     }
