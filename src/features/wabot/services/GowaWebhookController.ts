@@ -49,8 +49,8 @@ async function sendReactionViaGowa(
   messageId: string,
   emoji: string
 ): Promise<void> {
-  const url = `${GOWA_BASE_URL}/send/reaction`;
-  const body = { phone, message_id: messageId, emoji };
+  const url = `${GOWA_BASE_URL}/message/${messageId}/reaction`;
+  const body = { phone, emoji };
 
   const resp = await fetch(url, {
     method: "POST",
@@ -72,7 +72,7 @@ async function sendReactionViaGowa(
 // Helper: Kirim status "typing" (Mengetik)
 // ─────────────────────────────────────────────────────────────────────────────
 async function sendPresenceViaGowa(phone: string, action: "start" | "stop"): Promise<void> {
-  const url = `${GOWA_BASE_URL}/send/presence`;
+  const url = `${GOWA_BASE_URL}/send/chat-presence`;
   const body = { phone, action };
 
   const resp = await fetch(url, {
