@@ -7,7 +7,7 @@ import { processBotTransactionUseCase } from "../domain/use-cases/ProcessBotTran
 import { logger } from "../../../infrastructure/logger/logger.js";
 
 // URL & API Key GOWA (diambil dari .env, isi saat deploy di VPS)
-const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://localhost:3000";
+const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
 const GOWA_API_KEY = process.env.WA_BOT_API_KEY || process.env.GOWA_API_KEY || "";
 const GOWA_DEVICE_ID = process.env.WA_BOT_DEVICE_ID || process.env.GOWA_DEVICE_ID || "079cae22-efa6-4089-8049-1d1dad483e56";
 const STAGING_ALLOWED_NUMBERS = (process.env.STAGING_ALLOWED_NUMBERS || "")
@@ -181,14 +181,15 @@ export const gowaWebhookController = async (c: Context) => {
 
     const latencyMs = Date.now() - startTime;
 
-    // 7. Tangani hasil: ignored (user tidak terdaftar di grup → silent)
+    // 7. Tangani hasil: ignored (silent)
     if (result.isIgnored) {
-      logger.info("Silent ignore (user not registered in group)", {
+      const reason = (result as any).ignoreReason || "unknown";
+      logger.info(`Silent ignore (${reason})`, {
         sender: senderPhone,
-        group: groupId,
+        group: groupId || "personal",
         latency_ms: latencyMs,
       });
-      return c.json({ success: true, ignored: true });
+      return c.json({ success: true, ignored: true, reason });
     }
 
     // 8. Tangani hasil: gagal (error validasi / AI)

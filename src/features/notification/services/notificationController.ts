@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { prisma } from "../../../infrastructure/database/prisma.js";
+import { logger } from "../../../infrastructure/logger/logger.js";
 
 /**
  * GET /notifications
@@ -21,8 +22,8 @@ export async function getNotificationsController(c: Context) {
     });
 
     return c.json({ notifications, unreadCount });
-  } catch (error) {
-    console.error("[Notification] Error fetching:", error);
+  } catch (error: any) {
+    logger.error("[Notification] Error fetching:", { error: error.message });
     return c.json({ error: "Gagal mengambil notifikasi" }, 500);
   }
 }
@@ -50,8 +51,8 @@ export async function markReadController(c: Context) {
     });
 
     return c.json({ success: true });
-  } catch (error) {
-    console.error("[Notification] Error marking read:", error);
-    return c.json({ error: "Gagal memperbarui notifikasi" }, 500);
+  } catch (error: any) {
+    logger.error("[Notification] Error marking read:", { error: error.message });
+    return c.json({ error: "Gagal update status notifikasi" }, 500);
   }
 }

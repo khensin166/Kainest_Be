@@ -15,7 +15,8 @@ export const todoRepository = {
   async findTodosByCoupleId(coupleId: string) {
     return prisma.todo.findMany({
       where: { coupleId: coupleId },
-      orderBy: { createdAt: 'desc' } // Tampilkan yang terbaru di atas
+      orderBy: { createdAt: 'desc' }, // Tampilkan yang terbaru di atas
+      take: 50
     });
   },
 
