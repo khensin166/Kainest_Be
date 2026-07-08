@@ -85,7 +85,9 @@ jobs:
       - name: Setup SSH Key & Ansible Inventory
         run: |
           mkdir -p ~/.ssh
-          echo "${{ vars.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          cat << 'EOF' > ~/.ssh/id_rsa
+          ${{ secrets.VPS_SSH_KEY }}
+          EOF
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ vars.VPS_IP }} >> ~/.ssh/known_hosts
           
