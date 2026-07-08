@@ -32,6 +32,7 @@
           GITHUB_CLIENT_ID={{ github_client_id }}
           GITHUB_CLIENT_SECRET={{ github_client_secret }}
           GROQ_API_KEY={{ groq_api_key }}
+          RESEND_API_KEY={{ resend_api_key }}
           RESEND_FROM_EMAIL={{ resend_from_email }}
           CLOUDINARY_CLOUD_NAME={{ cloudinary_cloud_name }}
           CLOUDINARY_API_KEY={{ cloudinary_api_key }}

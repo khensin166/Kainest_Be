@@ -108,6 +108,7 @@ jobs:
             -e "github_client_id=${{ vars.G1THUB_CLIENT_ID }}" \
             -e "github_client_secret=${{ vars.G1THUB_CLIENT_SECRET }}" \
             -e "groq_api_key=${{ vars.GROQ_API_KEY }}" \
+            -e "resend_api_key=${{ vars.RESEND_API_KEY }}" \
             -e "resend_from_email=${{ vars.RESEND_FROM_EMAIL }}" \
             -e "cloudinary_cloud_name=${{ vars.CLOUDINARY_CLOUD_NAME }}" \
             -e "cloudinary_api_key=${{ vars.CLOUDINARY_API_KEY }}" \
