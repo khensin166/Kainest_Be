@@ -34,16 +34,35 @@ export async function syncGithubReleasesController(c) {
         if (token) {
             headers["Authorization"] = `token ${token}`;
         }
-        const response = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/releases`, { headers });
-        if (!response.ok) {
-            const errText = await response.text();
-            console.error("[SystemUpdate] GitHub API error:", response.status, errText);
+        // Ambil list rilis sekaligus rilis spesifik "latest" untuk mengatasi issue cache di GitHub API
+        const [releasesResponse, latestResponse] = await Promise.all([
+            fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/releases`, { headers }),
+            fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`, { headers })
+        ]);
+        if (!releasesResponse.ok) {
+            const errText = await releasesResponse.text();
+            console.error("[SystemUpdate] GitHub API error (/releases):", releasesResponse.status, errText);
             return c.json({ error: "Gagal menghubungi GitHub API" }, 500);
         }
-        const releases = await response.json();
-        if (!Array.isArray(releases)) {
+        let allReleases = await releasesResponse.json();
+        if (!Array.isArray(allReleases)) {
             return c.json({ error: "Format respons GitHub tidak valid" }, 500);
         }
+        // Gabungkan rilis terbaru jika berhasil diambil
+        if (latestResponse.ok) {
+            const latestRelease = await latestResponse.json();
+            if (latestRelease && latestRelease.tag_name) {
+                allReleases.push(latestRelease);
+            }
+        }
+        // Hilangkan duplikasi berdasarkan tag_name
+        const uniqueReleasesMap = new Map();
+        for (const release of allReleases) {
+            if (release.tag_name) {
+                uniqueReleasesMap.set(release.tag_name, release);
+            }
+        }
+        const releases = Array.from(uniqueReleasesMap.values());
         let newlyAdded = 0;
         let blasted = 0;
         for (const release of releases) {

@@ -28,12 +28,22 @@ export const waBotConfigRepository = {
     });
   },
   /**
-   * Memperbarui nomor HP bot (Untuk webhook bailey)
+   * Memperbarui nomor HP bot Production (Untuk webhook bailey)
    */
   async updateBotPhoneNumber(userId: string, botPhoneNumber: string) {
     return prisma.waBotConfig.update({
       where: { userId },
       data: { botPhoneNumber },
+    });
+  },
+
+  /**
+   * Memperbarui nomor HP bot Staging (Tidak mengganggu nomor Production)
+   */
+  async updateBotPhoneNumberStaging(userId: string, botPhoneNumberStaging: string) {
+    return prisma.waBotConfig.update({
+      where: { userId },
+      data: { botPhoneNumberStaging },
     });
   },
 
@@ -44,3 +54,4 @@ export const waBotConfigRepository = {
     return prisma.waBotConfig.findFirst();
   },
 };
+
