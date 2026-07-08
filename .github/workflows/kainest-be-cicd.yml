@@ -48,7 +48,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ vars.GITHUB_TOKEN }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -85,13 +85,13 @@ jobs:
       - name: Setup SSH Key & Ansible Inventory
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ vars.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.VPS_IP }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ vars.VPS_IP }} >> ~/.ssh/known_hosts
           
           # Buat file inventory sementara
           echo "[webservers]" > inventory.ini
-          echo "${{ secrets.VPS_IP }} ansible_user=${{ secrets.VPS_USER }} ansible_ssh_private_key_file=~/.ssh/id_rsa" >> inventory.ini
+          echo "${{ vars.VPS_IP }} ansible_user=${{ vars.VPS_USER }} ansible_ssh_private_key_file=~/.ssh/id_rsa" >> inventory.ini
 
       - name: Run Ansible Playbook
         run: |
@@ -100,24 +100,23 @@ jobs:
           
           ansible-playbook -i inventory.ini deploy/ansible/deploy.yml \
             -e "target_image=${TARGET_IMAGE}" \
-            -e "database_url=${{ secrets.DATABASE_URL }}" \
-            -e "direct_url=${{ secrets.DIRECT_URL }}" \
-            -e "better_auth_secret=${{ secrets.BETTER_AUTH_SECRET }}" \
+            -e "database_url=${{ vars.DATABASE_URL }}" \
+            -e "direct_url=${{ vars.DIRECT_URL }}" \
+            -e "better_auth_secret=${{ vars.BETTER_AUTH_SECRET }}" \
             -e "better_auth_url=${{ vars.BETTER_AUTH_URL }}" \
-            -e "jwt_secret=${{ secrets.JWT_SECRET }}" \
-            -e "google_client_id=${{ secrets.GOOGLE_CLIENT_ID }}" \
-            -e "google_client_secret=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
-            -e "github_client_id=${{ secrets.G1THUB_CLIENT_ID }}" \
-            -e "github_client_secret=${{ secrets.G1THUB_CLIENT_SECRET }}" \
-            -e "groq_api_key=${{ secrets.GROQ_API_KEY }}" \
-            -e "resend_api_key=${{ secrets.RESEND_API_KEY }}" \
+            -e "jwt_secret=${{ vars.JWT_SECRET }}" \
+            -e "google_client_id=${{ vars.GOOGLE_CLIENT_ID }}" \
+            -e "google_client_secret=${{ vars.GOOGLE_CLIENT_SECRET }}" \
+            -e "github_client_id=${{ vars.G1THUB_CLIENT_ID }}" \
+            -e "github_client_secret=${{ vars.G1THUB_CLIENT_SECRET }}" \
+            -e "groq_api_key=${{ vars.GROQ_API_KEY }}" \
+            -e "resend_api_key=${{ vars.RESEND_API_KEY }}" \
             -e "resend_from_email=${{ vars.RESEND_FROM_EMAIL }}" \
-            -e "cloudinary_cloud_name=${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
-            -e "cloudinary_api_key=${{ secrets.CLOUDINARY_API_KEY }}" \
-            -e "cloudinary_api_secret=${{ secrets.CLOUDINARY_API_SECRET }}" \
-            -e "github_token=${{ secrets.G1THUB_TOKEN_API }}" \
+            -e "cloudinary_cloud_name=${{ vars.CLOUDINARY_CLOUD_NAME }}" \
+            -e "cloudinary_api_key=${{ vars.CLOUDINARY_API_KEY }}" \
+            -e "cloudinary_api_secret=${{ vars.CLOUDINARY_API_SECRET }}" \
+            -e "github_token=${{ vars.G1THUB_TOKEN_API }}" \
             -e "frontend_url=${{ vars.FRONTEND_URL }}" \
             -e "gowa_base_url=${{ vars.GOWA_BASE_URL }}" \
-            -e "gowa_api_key=${{ secrets.WA_BOT_API_KEY }}" \
-            -e "bot_env_mode=${{ vars.BOT_ENV_MODE }}" \
-            -e "staging_allowed_numbers=${{ secrets.STAGING_ALLOWED_NUMBERS }}"
+            -e "gowa_api_key=${{ vars.WA_BOT_API_KEY }}" \
+            -e "bot_env_mode=${{ vars.BOT_ENV_MODE }}" 
