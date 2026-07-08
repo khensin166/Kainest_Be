@@ -48,7 +48,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ vars.GITHUB_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -101,21 +101,17 @@ jobs:
           ansible-playbook -i inventory.ini deploy/ansible/deploy.yml \
             -e "target_image=${TARGET_IMAGE}" \
             -e "database_url=${{ vars.DATABASE_URL }}" \
-            -e "direct_url=${{ vars.DIRECT_URL }}" \
             -e "better_auth_secret=${{ vars.BETTER_AUTH_SECRET }}" \
             -e "better_auth_url=${{ vars.BETTER_AUTH_URL }}" \
-            -e "jwt_secret=${{ vars.JWT_SECRET }}" \
             -e "google_client_id=${{ vars.GOOGLE_CLIENT_ID }}" \
             -e "google_client_secret=${{ vars.GOOGLE_CLIENT_SECRET }}" \
             -e "github_client_id=${{ vars.G1THUB_CLIENT_ID }}" \
             -e "github_client_secret=${{ vars.G1THUB_CLIENT_SECRET }}" \
             -e "groq_api_key=${{ vars.GROQ_API_KEY }}" \
-            -e "resend_api_key=${{ vars.RESEND_API_KEY }}" \
             -e "resend_from_email=${{ vars.RESEND_FROM_EMAIL }}" \
             -e "cloudinary_cloud_name=${{ vars.CLOUDINARY_CLOUD_NAME }}" \
             -e "cloudinary_api_key=${{ vars.CLOUDINARY_API_KEY }}" \
             -e "cloudinary_api_secret=${{ vars.CLOUDINARY_API_SECRET }}" \
-            -e "github_token=${{ vars.G1THUB_TOKEN_API }}" \
             -e "frontend_url=${{ vars.FRONTEND_URL }}" \
             -e "gowa_base_url=${{ vars.GOWA_BASE_URL }}" \
             -e "gowa_api_key=${{ vars.WA_BOT_API_KEY }}" \
