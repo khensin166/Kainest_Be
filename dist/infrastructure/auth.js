@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { logger } from "./logger/logger.js";
 import { admin, bearer } from "better-auth/plugins";
 import { prisma } from "./database/prisma.js";
 import { Resend } from "resend";
@@ -49,10 +50,10 @@ export const auth = betterAuth({
                     subject: "Reset Kata Sandi Kainest",
                     html: htmlBody,
                 });
-                console.log("[Auth] Email reset kata sandi terkirim:", data);
+                logger.info("[Auth] Email reset kata sandi terkirim:", { data });
             }
             catch (error) {
-                console.error("[Auth] Gagal mengirim email reset kata sandi:", error);
+                logger.error("[Auth] Gagal mengirim email reset kata sandi:", { error: error.message });
             }
         },
     },

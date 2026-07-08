@@ -1,5 +1,7 @@
 // app.ts
 import { Hono } from 'hono';
+import * as fs from 'fs';
+import * as path from 'path';
 import { auth } from './infrastructure/auth.js';
 import { profileRoute } from './features/profile/presentation/profileRoute.js';
 import { coupleRoute } from './features/couple/presentation/coupleRoute.js';
@@ -13,12 +15,15 @@ import { notificationRoute } from "./features/notification/presentation/notifica
 import { feedbackRoute } from "./features/feedback/presentation/feedbackRoute.js";
 import { systemUpdateRoute } from "./features/systemUpdate/presentation/systemUpdateRoute.js";
 import { cors } from 'hono/cors';
+import { secureHeaders } from 'hono/secure-headers';
 import { loggingMiddleware } from './infrastructure/middlewares/LoggingMiddleware.js';
 const app = new Hono();
+// Security Hardening: Tambahkan HTTP Security Headers
+app.use('*', secureHeaders());
 // Hanya izinkan request dari frontend Vue Anda (default Vite)
 // Gunakan CORS dengan credentials untuk session cookie
 app.use('*', cors({
-    origin: ['https://kainest.kenantomfie.site', 'http://localhost:5173', 'https://staging.kainest.kenantomfie.site'],
+    origin: ['https://kainest.kenantomfie.site', 'http://localhost:5173', 'https://staging.kainest.kenantomfie.site', 'https://gowa.kenantomfie.com',],
     credentials: true,
 }));
 // 🔵 Global Logging Middleware — Semua request masuk akan tercatat
@@ -69,4 +74,59 @@ app.route("/notifications", notificationRoute);
 app.route("/feedbacks", feedbackRoute);
 app.route("/system-updates", systemUpdateRoute);
 app.get('/', (c) => c.text('Hello from Kainest Backend! 🚀'));
+app.get('/doc', (c) => {
+    try {
+        const docPath = path.resolve(process.cwd(), 'doc', 'kainest_system_flow.md');
+        const mdContent = fs.readFileSync(docPath, 'utf8');
+        // Render HTML sederhana dengan marked.js dan mermaid.js dari CDN
+        const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kainest System Flow</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+      mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; color: #333; background: #fafafa; }
+      pre { background: #f6f8fa; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+      code { font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace; background: #eee; padding: 0.2em 0.4em; border-radius: 3px; }
+      pre code { background: none; padding: 0; }
+      .mermaid { margin: 2rem 0; background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+      h1, h2, h3 { border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+    </style>
+</head>
+<body>
+    <div id="content"></div>
+    <script>
+      // Escape backticks and dollars in the markdown content so it can be safely injected as a template literal
+      const rawMd = \`${mdContent.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
+      
+      const renderer = new marked.Renderer();
+      const originalCodeRenderer = renderer.code.bind(renderer);
+      
+      renderer.code = function(code, language, isEscaped) {
+        if (language === 'mermaid') {
+          return '<div class="mermaid">' + code + '</div>';
+        }
+        return originalCodeRenderer(code, language, isEscaped);
+      };
+      
+      marked.setOptions({ renderer });
+      document.getElementById('content').innerHTML = marked.parse(rawMd);
+    </script>
+</body>
+</html>
+    `;
+        return c.html(html);
+    }
+    catch (error) {
+        console.error("Error serving doc:", error);
+        return c.text('Document not found', 404);
+    }
+});
 export default app;

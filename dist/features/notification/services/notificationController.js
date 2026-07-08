@@ -1,4 +1,5 @@
 import { prisma } from "../../../infrastructure/database/prisma.js";
+import { logger } from "../../../infrastructure/logger/logger.js";
 /**
  * GET /notifications
  * Ambil semua notifikasi milik user yang login, terbaru dulu.
@@ -18,7 +19,7 @@ export async function getNotificationsController(c) {
         return c.json({ notifications, unreadCount });
     }
     catch (error) {
-        console.error("[Notification] Error fetching:", error);
+        logger.error("[Notification] Error fetching:", { error: error.message });
         return c.json({ error: "Gagal mengambil notifikasi" }, 500);
     }
 }
@@ -43,7 +44,7 @@ export async function markReadController(c) {
         return c.json({ success: true });
     }
     catch (error) {
-        console.error("[Notification] Error marking read:", error);
-        return c.json({ error: "Gagal memperbarui notifikasi" }, 500);
+        logger.error("[Notification] Error marking read:", { error: error.message });
+        return c.json({ error: "Gagal update status notifikasi" }, 500);
     }
 }

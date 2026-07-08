@@ -2,10 +2,13 @@ import { botTransactionRepository } from "../../data/BotTransactionRepository.js
 import { classifyTransactionUseCase } from "../../../budgeting/domain/use-cases/ClassifyTransactionUseCase.js";
 import { createTransactionUseCase } from "../../../budgeting/domain/use-cases/CreateTransactionUseCase.js";
 import { prisma } from "../../../../infrastructure/database/prisma.js";
+import { transcribeAudio } from "../../../../infrastructure/api/cloudflareWhisperApi.js";
+import { logger } from "../../../../infrastructure/logger/logger.js";
 
 type ProcessBotTransactionInput = {
   type: string;
   text: string;
+  audioBuffer?: Buffer;
   sender: string;
   groupId?: string;
   timestamp?: number;
@@ -14,7 +17,9 @@ type ProcessBotTransactionInput = {
 // Pesan onboarding untuk user baru yang mengirim pesan pertama kali di personal
 const ONBOARDING_MESSAGE = `Kamu siapanyakkkk? 👀
 
-Kenalan dulu dong! Biar kita bisa mulai catat keuangan bareng, ikutin langkah ini ya:
+Kenalan dulu yuk! Kamu harus register dan daftarkan grup dan no wa supaya bisa mencatat bersama kami 🥳
+
+Ikuti langkah ini ya:
 
 1️⃣ Buka web *kainest.kenantomfie.site*
 2️⃣ Pilih menu *Profile / Settings* di pojok kanan atas.
@@ -33,12 +38,27 @@ Kenalan dulu dong! Biar kita bisa mulai catat keuangan bareng, ikutin langkah in
    Contoh: \`Makan siang 20k\` atau \`Bensin 50rb\``;
 
 export const processBotTransactionUseCase = async (data: ProcessBotTransactionInput) => {
-  // 1. Validasi tipe pesan
-  if (data.type !== "text" && data.type !== "extendedTextMessage") {
-    return { success: false, status: 400, message: "Hanya pesan teks yang didukung" };
+  // 1. Validasi tipe pesan dan transkripsi Audio (Voice Note)
+  let textMsg = data.text?.trim() || "";
+
+  if (data.type === "audio" || data.type === "voice" || data.type === "ptt") {
+    if (!data.audioBuffer) {
+      return { success: false, status: 400, message: "Audio buffer kosong", reaction: "❓" };
+    }
+    try {
+      textMsg = await transcribeAudio(data.audioBuffer);
+    } catch (error: any) {
+      return { success: false, status: 500, message: error.message, reaction: "⚠️", replyText: true };
+    }
+  } else if (data.type !== "text" && data.type !== "extendedTextMessage") {
+    return { success: false, status: 400, message: "Hanya pesan teks dan pesan suara (VN) yang didukung", reaction: "❓" };
   }
 
-  const textMsg = data.text.trim();
+  // Jika teks hasil transkripsi (atau teks asli) kosong
+  if (!textMsg) {
+    return { success: false, status: 400, message: "Pesan kosong tidak dapat diproses", reaction: "❓" };
+  }
+
   const lowerText = textMsg.toLowerCase();
 
   // 2. Pembersihan Sender
@@ -101,15 +121,14 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   const user = await botTransactionRepository.getUserByPhoneNumber(cleanSender);
 
   if (!user) {
-    // Jika dari grup dan user tidak terdaftar → DIAM TOTAL (tidak spam grup)
-    if (data.groupId) {
-      return { success: false, status: 404, isIgnored: true, ignoreReason: "user_not_registered" };
-    }
-    // Jika dari personal → kirim ONBOARDING
+    // Jika dari grup atau personal, kirim ONBOARDING dengan reaction ⚠️
+    const groupNotice = data.groupId ? "\n\n_Oh ya, grup ini juga belum terdaftar untuk Kainest loh._" : "";
     return {
-      success: true,
+      success: true, // true agar dikirim pesannya
+      reaction: "⚠️",
+      replyText: true,
       data: {
-        message: ONBOARDING_MESSAGE,
+        message: `${ONBOARDING_MESSAGE}${groupNotice}`,
         sendKicawSticker: true,
       },
     };
@@ -119,11 +138,14 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   if (data.groupId) {
     const activeGroup = await botTransactionRepository.getActiveGroup(data.groupId);
     if (!activeGroup) {
-      // Balas hanya jika user terdaftar dan pesan adalah sapaan atau transaksi nyata
+      // Balas peringatan grup belum aktif
       return {
-        success: false,
-        status: 403,
-        message: `👋 Halo, ${user.name || "Kak"}! Sebelum mulai mencatat, aktifkan dulu bot di grup ini ya!\n\nKetik:\n  \`!aktifkan-kainest\``,
+        success: true, // ubah menjadi true agar text dikirim
+        reaction: "⚠️",
+        replyText: true,
+        data: {
+          message: `👋 Halo, ${user.name || "Kak"}! Sebelum mulai mencatat, aktifkan dulu bot di grup ini ya!\n\nKetik:\n  \`!aktifkan-kainest\``,
+        }
       };
     }
   }
@@ -132,28 +154,31 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   if (isGreeting) {
     return {
       success: true,
+      reaction: "👀",
+      replyText: true, // tetap balas teks
       data: {
         message: `Halo, ${user.name || "Kak"}! 👋 Siap mencatat keuanganmu hari ini!\n\nLangsung ketik transaksimu ya, contoh:\n*Makan siang 20k* atau *Bensin 50rb* 😊`,
       },
     };
   }
 
-  // 9. Jika pesan hanya kata konfirmasi singkat ("ok", "sip"), abaikan saja (hemat Token AI)
+  // 9. Jika pesan hanya kata konfirmasi singkat ("ok", "sip"), abaikan saja tapi beri reaksi
   if (isAck) {
-    return { success: true, status: 200, isIgnored: true, ignoreReason: "acknowledgment_word" };
+    // success false tapi dengan reaction 👀 agar dikirim reaksi saja tanpa text
+    return { success: false, status: 200, isIgnored: false, ignoreReason: "acknowledgment_word", reaction: "👀", message: "" };
   }
 
   // 10. Klasifikasi menggunakan AI
   const classification = await classifyTransactionUseCase(user.id, data.text);
 
   if (!classification.success || !classification.categoryId) {
-    return { success: false, status: 400, message: "Gagal mengklasifikasikan pengeluaran." };
+    return { success: false, status: 400, message: "Gagal mengklasifikasikan pengeluaran.", reaction: "❓" };
   }
 
   // 9. Catat Transaksi
   const amount = classification.amount || 0;
   if (amount <= 0) {
-    return { success: false, status: 400, message: "Nominal pengeluaran tidak terdeteksi atau 0." };
+    return { success: false, status: 400, message: "Nominal pengeluaran tidak terdeteksi atau 0.", reaction: "❓" };
   }
 
   const txDate = data.timestamp ? new Date(data.timestamp * 1000).toISOString() : new Date().toISOString();

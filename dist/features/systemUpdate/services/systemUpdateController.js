@@ -1,4 +1,5 @@
 import { prisma } from "../../../infrastructure/database/prisma.js";
+import { logger } from "../../../infrastructure/logger/logger.js";
 /**
  * GET /system-updates
  * Ambil changelog dari DB untuk frontend dashboard.
@@ -13,7 +14,7 @@ export async function getSystemUpdatesController(c) {
         return c.json({ updates });
     }
     catch (error) {
-        console.error("[SystemUpdate] Error fetching:", error);
+        logger.error("[SystemUpdate] Error fetching:", { error: error.message });
         return c.json({ error: "Gagal mengambil system updates" }, 500);
     }
 }
@@ -41,7 +42,7 @@ export async function syncGithubReleasesController(c) {
         ]);
         if (!releasesResponse.ok) {
             const errText = await releasesResponse.text();
-            console.error("[SystemUpdate] GitHub API error (/releases):", releasesResponse.status, errText);
+            logger.error("[SystemUpdate] GitHub API error (/releases)", { status: releasesResponse.status, errText });
             return c.json({ error: "Gagal menghubungi GitHub API" }, 500);
         }
         let allReleases = await releasesResponse.json();
@@ -109,10 +110,11 @@ export async function syncGithubReleasesController(c) {
                 blasted++;
             }
         }
+        logger.info("[SystemUpdate] Sync completed", { newlyAdded, blasted });
         return c.json({ success: true, newlyAdded, blasted });
     }
     catch (error) {
-        console.error("[SystemUpdate] Error syncing:", error);
+        logger.error("[SystemUpdate] Error syncing:", { error: error.message });
         return c.json({ error: "Terjadi kesalahan saat sync dari GitHub" }, 500);
     }
 }

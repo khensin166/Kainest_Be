@@ -26,7 +26,7 @@ Lingkungan khusus administrator & developer untuk bereksperimen.
 
 ## 🔄 Alur Transaksi WhatsApp (Bot Flow)
 
-Berikut adalah urutan proses (*Sequence*) apa yang terjadi saat Anda mengetik *"Makan siang 20rb"* ke bot Kainest di WhatsApp.
+Berikut adalah urutan proses (*Sequence*) apa yang terjadi saat Anda mengirimkan teks ("Makan siang 20rb") atau *Voice Note* (Pesan Suara) ke bot Kainest di WhatsApp.
 
 ```mermaid
 sequenceDiagram
@@ -34,20 +34,32 @@ sequenceDiagram
     actor User as 👤 User (WhatsApp)
     participant GOWA as 🤖 GOWA Bot (VPS)
     participant Backend as ⚙️ Backend Hono
+    participant Whisper as 🎙️ Whisper API (Cloudflare)
     participant DB as 🗄️ Supabase DB
     participant AI as 🧠 Groq AI API
 
-    User->>GOWA: Kirim Pesan Teks ("Makan siang 20rb")
-    Note over GOWA: GOWA menangkap pesan<br/>(via Baileys/WA Web)
+    User->>GOWA: Kirim Pesan Teks / Audio (VN)
+    Note over GOWA: GOWA menangkap pesan
     GOWA->>Backend: HTTP POST Webhook (/wabot/webhook/gowa)
     
-    Backend->>DB: Cek User by Phone Number
+    Note over Backend: Asynchronous Webhook Processing
+    Backend-->>GOWA: HTTP 200 OK (Mencegah Timeout)
     
-    alt User Tidak Ditemukan
-        DB-->>Backend: Null
-        Backend->>GOWA: HTTP POST /send/message (Pesan Onboarding)
+    alt Jika Pesan Audio (Voice Note)
+        Backend->>GOWA: GET /message/{id}/download
+        GOWA-->>Backend: File Audio Buffer
+        Backend->>Whisper: POST Audio Buffer untuk Transkripsi
+        Whisper-->>Backend: Teks ("Makan siang 20 ribu")
+    end
+
+    Backend->>DB: Cek User & Grup by Phone Number
+    
+    alt User/Grup Tidak Terdaftar
+        DB-->>Backend: Null / Inaktif
+        Backend->>GOWA: HTTP POST /send/reaction (⚠️)
+        Backend->>GOWA: HTTP POST /send/message (Pesan Onboarding interaktif)
         GOWA-->>User: "Kamu siapanyakkkk? 👀 ..."
-    else User Ditemukan & Valid
+    else User Terdaftar & Valid
         DB-->>Backend: User Data (ID, Name, dll)
         
         Note over Backend: Validasi Lulus, memanggil AI
@@ -58,9 +70,9 @@ sequenceDiagram
         DB-->>Backend: Sukses (tx_id)
         
         Note over Backend: Simulasi Jeda Mengetik (1.5s)
-        Backend->>GOWA: HTTP POST /send/reaction (⏳)
+        Backend->>GOWA: HTTP POST /send/reaction (✅ atau 👀)
         Backend->>GOWA: HTTP POST /send/presence (action: start)
-        Backend->>GOWA: HTTP POST /send/message (✅ Siap Noted!)
+        Backend->>GOWA: HTTP POST /send/message (Siap Noted / Balasan Sapaan)
         
         GOWA-->>User: Chat masuk & Reaksi diperbarui
     end
@@ -69,13 +81,15 @@ sequenceDiagram
 ### Penjelasan Detail Tiap Aktor:
 
 1. **🤖 GOWA Bot (Go-WhatsApp):**
-   Tugasnya murni sebagai **Jembatan/Kurir** (*Gateway*). GOWA tidak memiliki kecerdasan buatan ataupun database. Tugas utamanya adalah membaca pesan WA secara *real-time* lalu melempar isinya ke Backend, dan jika disuruh Backend untuk mengirim pesan, GOWA akan mengeksekusinya.
+   Tugasnya murni sebagai **Jembatan/Kurir** (*Gateway*). GOWA membaca pesan WA secara *real-time* lalu melempar isinya ke Backend, dan mengeksekusi pengiriman pesan dari Backend.
 2. **⚙️ Backend Hono (Node.js):**
-   Ini adalah **Otak Utama (Central Hub)**. Ia yang memegang *Business Logic* (Autentikasi, Filter Spam Staging, Verifikasi User, Validasi Limit Kantong). Ia yang memutuskan apakah sebuah pesan harus diabaikan, dibalas error, atau diteruskan ke AI.
-3. **🧠 Groq AI:**
-   Berperan sebagai **Analis Data (Classifier)**. Tugasnya murni hanya untuk merubah *Natural Language* ("*beli rokok indomaret 30k*") menjadi JSON yang terstruktur sehingga Backend tahu ini masuk kategori apa dan saldonya akan dipotong dari dompet mana.
-4. **👤 Frontend Web (Vue 3):**
-   Berperan sebagai **Dashboard & Control Panel**. Pengguna masuk ke web ini bukan untuk transaksi harian, melainkan untuk mengatur kategori, melihat grafik analitik keuangan, serta mengambil *Link Code* untuk aktivasi bot WhatsApp. Web ini me-*request* data (API Fetch) secara langsung ke **Backend Hono**.
+   Ini adalah **Otak Utama (Central Hub)**. Memegang *Business Logic* (Autentikasi, Filter Spam, Verifikasi, Limit Kantong). Merespons *webhook* GOWA secara asinkron agar tidak terjadi *timeout*.
+3. **🎙️ Cloudflare Whisper API:**
+   Berperan sebagai pengonversi suara ke teks. Menangani input berupa *Voice Note* untuk mempermudah pencatatan transaksi tanpa mengetik.
+4. **🧠 Groq AI:**
+   Berperan sebagai **Analis Data (Classifier)**. Mengubah *Natural Language* menjadi JSON terstruktur (menentukan kategori, tipe INCOME/EXPENSE, dan nominal).
+5. **👤 Frontend Web (Vue 3):**
+   Berperan sebagai **Dashboard & Control Panel** (Kategori, Tren Keuangan, Pengaturan).
 
 ---
 
@@ -84,6 +98,6 @@ Agar bot *Staging* tidak membocorkan pesan ke publik ketika sedang disempurnakan
 1. Ia mendeteksi variabel `BOT_ENV_MODE=staging`.
 2. Saat ada Webhook masuk dari GOWA, Backend akan memeriksa `STAGING_ALLOWED_NUMBERS`.
 3. Jika pengirim BUKAN admin, Backend merespons Webhook GOWA dengan **HTTP 200 OK (ignored)**, sehingga bot diam seribu bahasa.
-4. Ini mencegah bot *Staging* yang tidak stabil dari tidak sengaja membalas pesan pengguna *Production*.
+4. Pengecualian pada *Voice Note* di mode staging, jika dari admin akan tetap diproses.
 
 ![alt text](image.png)

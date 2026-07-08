@@ -22,7 +22,8 @@ export class AdminRepository {
             },
             orderBy: {
                 createdAt: 'desc'
-            }
+            },
+            take: 50
         });
     }
     /**
