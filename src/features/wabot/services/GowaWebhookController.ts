@@ -99,15 +99,16 @@ export const gowaWebhookController = async (c: Context) => {
   let senderPhone = "unknown";
 
   try {
-    // 1. Parsing payload dari GOWA
-    // GOWA mengirimkan struktur: { event, sender, text, is_from_me, message_id, ... }
+    // 1. Parsing payload dari GOWA v8.9
+    // Struktur baru: { event, device_id, payload: { id, from, body, chat_id, is_from_me, timestamp } }
     const payload = await c.req.json();
+    const data = payload.payload || {};
 
     const event: string = payload.event || payload.Event || "";
-    const senderRaw: string = payload.sender || payload.from || "";
-    const messageId: string = payload.message_id || payload.MessageID || "";
-    const textBody: string = payload.text || payload.message || payload.body || "";
-    const isFromMe: boolean = payload.is_from_me || payload.IsFromMe || false;
+    const senderRaw: string = data.from || payload.sender || payload.from || "";
+    const messageId: string = data.id || payload.message_id || payload.MessageID || "";
+    const textBody: string = data.body || payload.text || payload.message || "";
+    const isFromMe: boolean = data.is_from_me || payload.is_from_me || payload.IsFromMe || false;
 
     // Normalkan nomor telepon (hilangkan suffix WA dan kode negara prefix 0)
     senderPhone = senderRaw
@@ -115,9 +116,12 @@ export const gowaWebhookController = async (c: Context) => {
       .replace("@c.us", "")
       .replace("@lid", "");
 
-    // Tentukan groupId (jika ada — GOWA menyertakan group_id jika dari grup)
+    // Tentukan groupId (GOWA v8.9 menyertakannya di chat_id)
     const groupId: string | undefined =
-      payload.group_id || payload.GroupID || undefined;
+      (data.chat_id && data.chat_id.endsWith("@g.us")) ? data.chat_id : (payload.group_id || payload.GroupID || undefined);
+    
+    // Tentukan timestamp
+    const timestamp: number = data.timestamp ? Math.floor(new Date(data.timestamp).getTime() / 1000) : Math.floor(Date.now() / 1000);
 
     logger.info("Incoming Webhook from GOWA", {
       event,
@@ -172,7 +176,7 @@ export const gowaWebhookController = async (c: Context) => {
       text: processedText,
       sender: senderRaw,
       groupId,
-      timestamp: payload.timestamp || payload.Timestamp,
+      timestamp, // ✅ RFC3339 GOWA v8.9 (sudah dikonversi ke epoch seconds)
     });
 
     const latencyMs = Date.now() - startTime;
@@ -190,8 +194,9 @@ export const gowaWebhookController = async (c: Context) => {
     // 8. Tangani hasil: gagal (error validasi / AI)
     if (!result.success) {
       logger.warn("processBotTransaction rejected", {
-        sender: senderPhone,
-        status: result.status,
+        sender: senderRaw, // Gunakan original string untuk diproses lebih lanjut
+        groupId,
+        timestamp,
         message: result.message,
         latency_ms: latencyMs,
       });
