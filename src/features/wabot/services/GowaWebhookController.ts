@@ -143,7 +143,13 @@ export const gowaWebhookController = async (c: Context) => {
       return c.json({ success: true, ignored: true, reason: "non-message event" });
     }
 
-    // 4. Staging Safe Mode — hanya respons nomor admin & prefix !dev
+    // 4. Abaikan pesan kosong (stiker/gambar tanpa caption) — setelah event check
+    if (!textBody || !textBody.trim()) {
+      logger.info("Ignored empty message body", { sender: senderPhone });
+      return c.json({ success: true, ignored: true, reason: "empty body" });
+    }
+
+    // 5. Staging Safe Mode — hanya respons nomor admin & prefix !dev
     if (BOT_ENV_MODE === "staging") {
       const isAllowed = STAGING_ALLOWED_NUMBERS.some((n) =>
         senderPhone.endsWith(n) || n.endsWith(senderPhone)
@@ -160,86 +166,93 @@ export const gowaWebhookController = async (c: Context) => {
       // textBody sudah di-strip di use case — kita kirim tanpa prefix ke downstream
     }
 
-    // 5. Kirim reaksi ⏳ ke pengirim sebagai tanda "sedang diproses"
-    if (messageId) {
-      const replyTarget = groupId || `${senderPhone}@s.whatsapp.net`;
-      await sendReactionViaGowa(replyTarget, messageId, "⏳").catch(() => {});
-    }
+    // 5. Pemrosesan Asinkron (Background) agar GOWA tidak Timeout
+    // Kita jalankan sisa proses tanpa await, dan langsung return 200 OK ke GOWA
+    const runBackground = async () => {
+      try {
+        // 6. Kirim reaksi ⏳ ke pengirim sebagai tanda "sedang diproses"
+        if (messageId) {
+          const replyTarget = groupId || `${senderPhone}@s.whatsapp.net`;
+          await sendReactionViaGowa(replyTarget, messageId, "⏳").catch(() => {});
+        }
 
-    // 6. Proses pesan menggunakan logic backend yang sudah ada
-    const processedText = BOT_ENV_MODE === "staging"
-      ? textBody.slice("!dev ".length).trim()
-      : textBody;
+        // 7. Proses pesan menggunakan logic backend yang sudah ada
+        const processedText = BOT_ENV_MODE === "staging"
+          ? textBody.slice("!dev ".length).trim()
+          : textBody;
 
-    const result = await processBotTransactionUseCase({
-      type: "text",
-      text: processedText,
-      sender: senderRaw,
-      groupId,
-      timestamp, // ✅ RFC3339 GOWA v8.9 (sudah dikonversi ke epoch seconds)
-    });
+        const result = await processBotTransactionUseCase({
+          type: "text",
+          text: processedText,
+          sender: senderRaw,
+          groupId,
+          timestamp, // ✅ RFC3339 GOWA v8.9
+        });
 
-    const latencyMs = Date.now() - startTime;
+        const latencyMs = Date.now() - startTime;
 
-    // 7. Tangani hasil: ignored (silent)
-    if (result.isIgnored) {
-      const reason = (result as any).ignoreReason || "unknown";
-      logger.info(`Silent ignore (${reason})`, {
-        sender: senderPhone,
-        group: groupId || "personal",
-        latency_ms: latencyMs,
-      });
-      return c.json({ success: true, ignored: true, reason });
-    }
+        // 8. Tangani hasil: ignored (silent)
+        if (result.isIgnored) {
+          const reason = (result as any).ignoreReason || "unknown";
+          logger.info(`Silent ignore (${reason})`, {
+            sender: senderPhone,
+            group: groupId || "personal",
+            latency_ms: latencyMs,
+          });
+          return; // Selesai
+        }
 
-    // 8. Tangani hasil: gagal (error validasi / AI)
-    if (!result.success) {
-      logger.warn("processBotTransaction rejected", {
-        sender: senderRaw, // Gunakan original string untuk diproses lebih lanjut
-        groupId,
-        timestamp,
-        message: result.message,
-        latency_ms: latencyMs,
-      });
+        // 9. Tangani hasil: gagal (bukan transaksi / nominal 0)
+        if (!result.success) {
+          logger.warn("processBotTransaction rejected", {
+            sender: senderRaw,
+            groupId,
+            timestamp,
+            message: result.message,
+            latency_ms: latencyMs,
+          });
 
-      // Kirim reaksi error & pesan gagal ke pengirim
-      const replyTarget = groupId || `${senderPhone}@s.whatsapp.net`;
-      if (messageId) await sendReactionViaGowa(replyTarget, messageId, "⚠️").catch(() => {});
-      if (result.message && result.status !== 404) {
-        // Universal Typing Delay (1.5s) Anti-Banned & E2EE Fix
-        await sendPresenceViaGowa(replyTarget, "start").catch(() => {});
-        await new Promise((r) => setTimeout(r, 1500));
-        
-        await sendTextViaGowa(replyTarget, result.message).catch((e) =>
-          logger.error("Failed to send error reply via GOWA", { error: e.message })
-        );
+          // HANYA kirim reaksi ❓ (Tanda tanya / Tidak mengerti), TIDAK balas teks error
+          const replyTarget = groupId || `${senderPhone}@s.whatsapp.net`;
+          if (messageId) await sendReactionViaGowa(replyTarget, messageId, "❓").catch(() => {});
+          
+          return; // Selesai
+        }
+
+        // 10. Sukses — kirim reaksi ✅ dan teks balasan
+        const replyTarget = groupId || `${senderPhone}@s.whatsapp.net`;
+        if (messageId) await sendReactionViaGowa(replyTarget, messageId, "✅").catch(() => {});
+
+        if (result.data?.message) {
+          // Universal Typing Delay (1.5s) Anti-Banned & E2EE Fix
+          await sendPresenceViaGowa(replyTarget, "start").catch(() => {});
+          await new Promise((r) => setTimeout(r, 1500));
+
+          await sendTextViaGowa(replyTarget, result.data.message).catch((e) =>
+            logger.error("Failed to send success reply via GOWA", { error: e.message })
+          );
+        }
+
+        logger.info("Transaction processed successfully", {
+          sender: senderPhone,
+          group: groupId || "personal",
+          transaction_id: result.data?.transaction?.id,
+          latency_ms: latencyMs,
+        });
+
+      } catch (err: any) {
+        logger.error("Background webhook processing failed", {
+          sender: senderPhone,
+          error: err.message,
+        });
       }
+    };
 
-      return c.json(result, 200);
-    }
+    // Jalankan background job
+    runBackground();
 
-    // 9. Sukses — kirim reaksi ✅ dan teks balasan
-    const replyTarget = groupId || `${senderPhone}@s.whatsapp.net`;
-    if (messageId) await sendReactionViaGowa(replyTarget, messageId, "✅").catch(() => {});
-
-    if (result.data?.message) {
-      // Universal Typing Delay (1.5s) Anti-Banned & E2EE Fix
-      await sendPresenceViaGowa(replyTarget, "start").catch(() => {});
-      await new Promise((r) => setTimeout(r, 1500));
-
-      await sendTextViaGowa(replyTarget, result.data.message).catch((e) =>
-        logger.error("Failed to send success reply via GOWA", { error: e.message })
-      );
-    }
-
-    logger.info("Transaction processed successfully", {
-      sender: senderPhone,
-      group: groupId || "personal",
-      transaction_id: result.data?.transaction?.id,
-      latency_ms: latencyMs,
-    });
-
-    return c.json({ success: true, latency_ms: latencyMs });
+    // Langsung return 200 OK ke GOWA (Mencegah "context deadline exceeded" / Timeout Retry)
+    return c.json({ success: true, status: "processing_in_background" }, 200);
   } catch (error: any) {
     logger.error("GowaWebhookController unhandled error", {
       sender: senderPhone,
