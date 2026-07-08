@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { prisma } from "../../../infrastructure/database/prisma.js";
+import { logger } from "../../../infrastructure/logger/logger.js";
 
 /**
  * GET /feedbacks
@@ -7,7 +8,7 @@ import { prisma } from "../../../infrastructure/database/prisma.js";
  */
 export async function getFeedbacksController(c: Context) {
   try {
-    const limit = Number(c.req.query("limit") ?? 10);
+    const limit = Number(c.req.query("limit") ?? 50);
 
     const feedbacks = await prisma.userFeedback.findMany({
       where: { isVisible: true },
@@ -25,8 +26,8 @@ export async function getFeedbacksController(c: Context) {
     });
 
     return c.json({ feedbacks });
-  } catch (error) {
-    console.error("[Feedback] Error fetching:", error);
+  } catch (error: any) {
+    logger.error("[Feedback] Error fetching:", { error: error.message });
     return c.json({ error: "Gagal mengambil feedback" }, 500);
   }
 }

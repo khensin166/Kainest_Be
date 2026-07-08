@@ -1,15 +1,33 @@
 import winston from 'winston';
+import { asyncContext } from './asyncContext.js';
 
 const { combine, timestamp, printf, colorize } = winston.format;
 
+// Plugin untuk otomatis menyisipkan Trace ID dari context
+const traceIdFormat = winston.format((info) => {
+  const store = asyncContext.getStore();
+  if (store && store.has('traceId')) {
+    info.traceId = store.get('traceId');
+  }
+  return info;
+});
+
 // Format khusus untuk membedakan level log dengan warna di console
 const consoleFormat = combine(
+  traceIdFormat(),
   colorize(),
   timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-  printf(({ level, message, timestamp, ...meta }) => {
-    let log = `[${timestamp}] ${level}: ${message}`;
+  printf(({ level, message, timestamp, traceId, ...meta }) => {
+    let log = `[${timestamp}]`;
+    if (traceId) log += ` [${traceId}]`;
+    log += ` ${level}: ${message}`;
+    
     if (Object.keys(meta).length > 0) {
-      log += `\n${JSON.stringify(meta, null, 2)}`;
+      // Hilangkan meta.correlation_id dari objek jika sudah ditampilkan di TraceID, biar rapi
+      if (meta.correlation_id === traceId) delete meta.correlation_id;
+      if (Object.keys(meta).length > 0) {
+        log += `\n${JSON.stringify(meta, null, 2)}`;
+      }
     }
     return log;
   })
@@ -17,11 +35,18 @@ const consoleFormat = combine(
 
 // Format khusus untuk file log (tanpa warna ASCII)
 const fileFormat = combine(
+  traceIdFormat(),
   timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-  printf(({ level, message, timestamp, ...meta }) => {
-    let log = `[${timestamp}] ${level}: ${message}`;
+  printf(({ level, message, timestamp, traceId, ...meta }) => {
+    let log = `[${timestamp}]`;
+    if (traceId) log += ` [${traceId}]`;
+    log += ` ${level}: ${message}`;
+
     if (Object.keys(meta).length > 0) {
-      log += ` - ${JSON.stringify(meta)}`;
+      if (meta.correlation_id === traceId) delete meta.correlation_id;
+      if (Object.keys(meta).length > 0) {
+        log += ` - ${JSON.stringify(meta)}`;
+      }
     }
     return log;
   })

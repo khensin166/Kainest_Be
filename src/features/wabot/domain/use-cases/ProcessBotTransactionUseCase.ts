@@ -103,7 +103,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   if (!user) {
     // Jika dari grup dan user tidak terdaftar → DIAM TOTAL (tidak spam grup)
     if (data.groupId) {
-      return { success: false, status: 404, isIgnored: true };
+      return { success: false, status: 404, isIgnored: true, ignoreReason: "user_not_registered" };
     }
     // Jika dari personal → kirim ONBOARDING
     return {
@@ -140,7 +140,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
 
   // 9. Jika pesan hanya kata konfirmasi singkat ("ok", "sip"), abaikan saja (hemat Token AI)
   if (isAck) {
-    return { success: true, status: 200, isIgnored: true };
+    return { success: true, status: 200, isIgnored: true, ignoreReason: "acknowledgment_word" };
   }
 
   // 10. Klasifikasi menggunakan AI
