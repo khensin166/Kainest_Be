@@ -1,7 +1,9 @@
 ---
 - name: Kainest Backend - Deploy & Force Update
   hosts: webservers
-  become: no
+  become: yes
+  become_method: sudo
+  become_user: root
   vars:
     project_dir: "/opt/kainest-backend"
     
