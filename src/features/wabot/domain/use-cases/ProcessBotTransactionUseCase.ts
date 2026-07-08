@@ -93,8 +93,9 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     };
   }
 
-  // 5. Deteksi pesan sapaan dasar
+  // 5. Deteksi pesan sapaan dasar & kata konfirmasi pendek
   const isGreeting = ["hai", "halo", "hallo", "hello", "p", "ping"].includes(lowerText.trim());
+  const isAck = ["ok", "oke", "sip", "siap", "mantap", "makasih", "terima kasih", "thanks", "y", "ya", "iya", "yaps"].includes(lowerText.trim());
 
   // 6. Cek apakah pengirim sudah terdaftar di Kainest
   const user = await botTransactionRepository.getUserByPhoneNumber(cleanSender);
@@ -137,7 +138,12 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     };
   }
 
-  // 8. Klasifikasi menggunakan AI
+  // 9. Jika pesan hanya kata konfirmasi singkat ("ok", "sip"), abaikan saja (hemat Token AI)
+  if (isAck) {
+    return { success: true, status: 200, isIgnored: true };
+  }
+
+  // 10. Klasifikasi menggunakan AI
   const classification = await classifyTransactionUseCase(user.id, data.text);
 
   if (!classification.success || !classification.categoryId) {

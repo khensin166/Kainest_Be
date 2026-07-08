@@ -85,3 +85,5 @@ Agar bot *Staging* tidak membocorkan pesan ke publik ketika sedang disempurnakan
 2. Saat ada Webhook masuk dari GOWA, Backend akan memeriksa `STAGING_ALLOWED_NUMBERS`.
 3. Jika pengirim BUKAN admin, Backend merespons Webhook GOWA dengan **HTTP 200 OK (ignored)**, sehingga bot diam seribu bahasa.
 4. Ini mencegah bot *Staging* yang tidak stabil dari tidak sengaja membalas pesan pengguna *Production*.
+
+![alt text](image.png)
