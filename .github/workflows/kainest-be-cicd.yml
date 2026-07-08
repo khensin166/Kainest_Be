@@ -1,0 +1,123 @@
+name: Kainest Backend CI/CD
+
+on:
+  push:
+    branches: [ "master", "main" ]
+    # Workflow ini akan mendeteksi perubahan berdasarkan path
+    paths:
+      - 'src/**'
+      - 'prisma/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'docker/**'
+      - 'docker-compose.deploy.yml'
+      - 'deploy/**'
+      - '.github/workflows/kainest-be-cicd.yml'
+
+env:
+  REGISTRY: ghcr.io
+
+# Izin eksplisit agar GITHUB_TOKEN bisa membaca kode dan menulis ke GHCR
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # ==========================================
+  # JOB 1: BUILD & PUSH IMAGE
+  # ==========================================
+  build_image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set lowercase image name
+        run: echo "IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Set Image Tag (Commit SHA)
+        id: set_tag
+        run: echo "TAG=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=short
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/kainest_be.Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # ==========================================
+  # JOB 2: ANSIBLE DEPLOY TO VPS
+  # ==========================================
+  deploy_to_server:
+    needs: build_image
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: sudo apt-get update && sudo apt-get install -y ansible sshpass
+
+      - name: Setup SSH Key & Ansible Inventory
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_IP }} >> ~/.ssh/known_hosts
+          
+          # Buat file inventory sementara
+          echo "[webservers]" > inventory.ini
+          echo "${{ secrets.VPS_IP }} ansible_user=${{ secrets.VPS_USER }} ansible_ssh_private_key_file=~/.ssh/id_rsa" >> inventory.ini
+
+      - name: Run Ansible Playbook
+        run: |
+          IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
+          TARGET_IMAGE="${{ env.REGISTRY }}/${IMAGE_NAME}:latest"
+          
+          ansible-playbook -i inventory.ini deploy/ansible/deploy.yml \
+            -e "target_image=${TARGET_IMAGE}" \
+            -e "database_url=${{ secrets.DATABASE_URL }}" \
+            -e "direct_url=${{ secrets.DIRECT_URL }}" \
+            -e "better_auth_secret=${{ secrets.BETTER_AUTH_SECRET }}" \
+            -e "better_auth_url=${{ vars.BETTER_AUTH_URL }}" \
+            -e "jwt_secret=${{ secrets.JWT_SECRET }}" \
+            -e "google_client_id=${{ secrets.GOOGLE_CLIENT_ID }}" \
+            -e "google_client_secret=${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+            -e "github_client_id=${{ secrets.G1THUB_CLIENT_ID }}" \
+            -e "github_client_secret=${{ secrets.G1THUB_CLIENT_SECRET }}" \
+            -e "groq_api_key=${{ secrets.GROQ_API_KEY }}" \
+            -e "resend_api_key=${{ secrets.RESEND_API_KEY }}" \
+            -e "resend_from_email=${{ vars.RESEND_FROM_EMAIL }}" \
+            -e "cloudinary_cloud_name=${{ secrets.CLOUDINARY_CLOUD_NAME }}" \
+            -e "cloudinary_api_key=${{ secrets.CLOUDINARY_API_KEY }}" \
+            -e "cloudinary_api_secret=${{ secrets.CLOUDINARY_API_SECRET }}" \
+            -e "github_token=${{ secrets.G1THUB_TOKEN_API }}" \
+            -e "frontend_url=${{ vars.FRONTEND_URL }}" \
+            -e "gowa_base_url=${{ vars.GOWA_BASE_URL }}" \
+            -e "gowa_api_key=${{ secrets.WA_BOT_API_KEY }}" \
+            -e "bot_env_mode=${{ vars.BOT_ENV_MODE }}" \
+            -e "staging_allowed_numbers=${{ secrets.STAGING_ALLOWED_NUMBERS }}"

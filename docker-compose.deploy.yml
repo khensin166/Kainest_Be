@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  kainest_backend:
+    image: ${TARGET_IMAGE:-ghcr.io/khensin166/kainest-be:latest}
+    container_name: kainest-backend
+    restart: always
+    ports:
+      - "3001:3000" # Expose internal port 3000 to external port 3001
+    env_file:
+      - .env
+    networks:
+      - kainest_net
+    # Optional: If you have persistent files like logs or local uploads
+    volumes:
+      - kainest_be_logs:/app/logs
+
+networks:
+  kainest_net:
+    external: true
+
+volumes:
+  kainest_be_logs:
