@@ -8,6 +8,7 @@ import {
   getBotInfoController
 } from "../services/WaBotConfigController.js";
 import { addBotTransactionController } from "../services/WaBotTransactionController.js";
+import { gowaWebhookController } from "../services/GowaWebhookController.js";
 
 export const wabotRoute = new Hono();
 
@@ -30,3 +31,9 @@ wabotRoute.post("/info", botAuthMiddleware, saveBotInfoController);
 // Rute Webhook dari n8n/Bot (Perlu API Key)
 // ==========================================
 wabotRoute.post("/transactions", botAuthMiddleware, addBotTransactionController);
+
+// ==========================================
+// Rute Webhook dari GOWA
+// ==========================================
+// Endpoint ini yang akan dipanggil oleh GOWA setiap ada pesan masuk
+wabotRoute.post("/webhook/gowa", gowaWebhookController);
