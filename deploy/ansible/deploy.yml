@@ -23,26 +23,21 @@
           NODE_ENV=production
           TARGET_IMAGE={{ target_image }}
           DATABASE_URL={{ database_url }}
-          DIRECT_URL={{ direct_url }}
           BETTER_AUTH_SECRET={{ better_auth_secret }}
           BETTER_AUTH_URL={{ better_auth_url }}
-          JWT_SECRET={{ jwt_secret }}
           GOOGLE_CLIENT_ID={{ google_client_id }}
           GOOGLE_CLIENT_SECRET={{ google_client_secret }}
           GITHUB_CLIENT_ID={{ github_client_id }}
           GITHUB_CLIENT_SECRET={{ github_client_secret }}
           GROQ_API_KEY={{ groq_api_key }}
-          RESEND_API_KEY={{ resend_api_key }}
           RESEND_FROM_EMAIL={{ resend_from_email }}
           CLOUDINARY_CLOUD_NAME={{ cloudinary_cloud_name }}
           CLOUDINARY_API_KEY={{ cloudinary_api_key }}
           CLOUDINARY_API_SECRET={{ cloudinary_api_secret }}
-          GITHUB_TOKEN={{ github_token }}
           FRONTEND_URL={{ frontend_url }}
           GOWA_BASE_URL={{ gowa_base_url }}
           WA_BOT_API_KEY={{ gowa_api_key }}
           BOT_ENV_MODE={{ bot_env_mode }}
-          STAGING_ALLOWED_NUMBERS={{ staging_allowed_numbers }}
         dest: "{{ project_dir }}/.env"
         mode: '0600'
       no_log: true
