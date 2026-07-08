@@ -8,7 +8,8 @@ import { logger } from "../../../infrastructure/logger/logger.js";
 
 // URL & API Key GOWA (diambil dari .env, isi saat deploy di VPS)
 const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://localhost:3000";
-const GOWA_API_KEY = process.env.GOWA_API_KEY || "";
+const GOWA_API_KEY = process.env.WA_BOT_API_KEY || process.env.GOWA_API_KEY || "";
+const GOWA_DEVICE_ID = process.env.WA_BOT_DEVICE_ID || process.env.GOWA_DEVICE_ID || "079cae22-efa6-4089-8049-1d1dad483e56";
 const STAGING_ALLOWED_NUMBERS = (process.env.STAGING_ALLOWED_NUMBERS || "")
   .split(",")
   .map((n) => n.trim())
@@ -19,13 +20,14 @@ const BOT_ENV_MODE = process.env.BOT_ENV_MODE || "production";
 // Helper: Kirim pesan teks balik ke GOWA
 // ─────────────────────────────────────────────────────────────────────────────
 async function sendTextViaGowa(phone: string, message: string): Promise<void> {
-  const url = `${GOWA_BASE_URL}/api/send/message`;
+  const url = `${GOWA_BASE_URL}/send/message`;
   const body = { phone, message };
 
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "X-Device-Id": GOWA_DEVICE_ID,
       ...(GOWA_API_KEY ? { Authorization: `Basic ${GOWA_API_KEY}` } : {}),
     },
     body: JSON.stringify(body),
@@ -47,13 +49,14 @@ async function sendReactionViaGowa(
   messageId: string,
   emoji: string
 ): Promise<void> {
-  const url = `${GOWA_BASE_URL}/api/send/reaction`;
+  const url = `${GOWA_BASE_URL}/send/reaction`;
   const body = { phone, message_id: messageId, emoji };
 
   const resp = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "X-Device-Id": GOWA_DEVICE_ID,
       ...(GOWA_API_KEY ? { Authorization: `Basic ${GOWA_API_KEY}` } : {}),
     },
     body: JSON.stringify(body),
@@ -62,6 +65,29 @@ async function sendReactionViaGowa(
   if (!resp.ok) {
     const text = await resp.text();
     logger.warn("GOWA reaction failed (non-fatal)", { phone, emoji, status: resp.status, error: text });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: Kirim status "typing" (Mengetik)
+// ─────────────────────────────────────────────────────────────────────────────
+async function sendPresenceViaGowa(phone: string, action: "start" | "stop"): Promise<void> {
+  const url = `${GOWA_BASE_URL}/send/presence`;
+  const body = { phone, action };
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Device-Id": GOWA_DEVICE_ID,
+      ...(GOWA_API_KEY ? { Authorization: `Basic ${GOWA_API_KEY}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    logger.warn("GOWA presence failed", { phone, action, error: text });
   }
 }
 
@@ -174,12 +200,16 @@ export const gowaWebhookController = async (c: Context) => {
       const replyTarget = groupId || `${senderPhone}@s.whatsapp.net`;
       if (messageId) await sendReactionViaGowa(replyTarget, messageId, "⚠️").catch(() => {});
       if (result.message && result.status !== 404) {
+        // Universal Typing Delay (1.5s) Anti-Banned & E2EE Fix
+        await sendPresenceViaGowa(replyTarget, "start").catch(() => {});
+        await new Promise((r) => setTimeout(r, 1500));
+        
         await sendTextViaGowa(replyTarget, result.message).catch((e) =>
           logger.error("Failed to send error reply via GOWA", { error: e.message })
         );
       }
 
-      return c.json(result, (result.status as any) || 400);
+      return c.json(result, 200);
     }
 
     // 9. Sukses — kirim reaksi ✅ dan teks balasan
@@ -187,6 +217,10 @@ export const gowaWebhookController = async (c: Context) => {
     if (messageId) await sendReactionViaGowa(replyTarget, messageId, "✅").catch(() => {});
 
     if (result.data?.message) {
+      // Universal Typing Delay (1.5s) Anti-Banned & E2EE Fix
+      await sendPresenceViaGowa(replyTarget, "start").catch(() => {});
+      await new Promise((r) => setTimeout(r, 1500));
+
       await sendTextViaGowa(replyTarget, result.data.message).catch((e) =>
         logger.error("Failed to send success reply via GOWA", { error: e.message })
       );
