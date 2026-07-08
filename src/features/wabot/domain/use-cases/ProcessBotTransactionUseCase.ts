@@ -166,11 +166,60 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   }
 
   // 10. Kembalikan Response Sukses
+  const transaction = createResult.data;
+  const pocket = transaction.category?.name || classification.categoryName || "-";
+  const icon = transaction.category?.icon || "🎯";
+  const formattedAmount = new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+  }).format(amount);
+
+  const dateObj = new Date(txDate);
+  const day = dateObj.toLocaleString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric" });
+  const month = dateObj.toLocaleString("id-ID", { timeZone: "Asia/Jakarta", month: "long" });
+  const year = dateObj.toLocaleString("id-ID", { timeZone: "Asia/Jakarta", year: "numeric" });
+  const time = dateObj.toLocaleString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" }).replace('.', ':').replace(':', '.');
+  const formattedTime = `${day} ${month} ${year} pukul ${time}`;
+
+  const txType = transaction.type === "INCOME" ? "Pemasukan" : "Pengeluaran";
+  const description = transaction.note || "-";
+
+  const headerTexts = [
+      "Transaksi berhasil diamankan ke database, bosku 😎",
+      "Dompet baru saja berbisik: \"noted...\" 😭",
+      "Ada transaksi baru nih 👀",
+      "Transaksi berhasil dikenali dan dicatat otomatis.",
+      "Kainest sudah catat biar nggak hilang dari ingatan 😆"
+  ];
+
+  let footerTexts = [];
+  if (transaction.type === "INCOME") {
+      footerTexts = [
+          "Alhamdulillah saldo mengembang 🤩",
+          "Makin tebel aja nih dompet 💸",
+          "Catatan aman, nikmati hasil jerih payahmu 🫡",
+          "Kainest ikut seneng denger kabarnya 🎉"
+      ];
+  } else {
+      footerTexts = [
+          "Saldo mungkin menangis, tapi catatan tetap rapi 🫡",
+          "Misi budgeting hari ini lanjut jalan 🚀",
+          "Tenang, Kainest sudah pegang datanya 🤝",
+          "Catatan aman, tinggal mental yang harus kuat 🫠"
+      ];
+  }
+
+  const randomHeader = headerTexts[Math.floor(Math.random() * headerTexts.length)];
+  const randomFooter = footerTexts[Math.floor(Math.random() * footerTexts.length)];
+
+  const replyText = `📒 Siap Noted!!🤖\n\n${randomHeader}\n\n⏰ Waktu: ${formattedTime}\n🔖 Tipe: ${txType}\n💰 Jumlah: ${formattedAmount}\n🧾 Deskripsi: ${description}\n${icon} Pocket: ${pocket}\n\n${randomFooter}`;
+
   return {
     success: true,
     data: {
-      message: `✅ Berhasil dicatat!\n\n📂 Kategori: ${classification.categoryName}\n💰 Nominal: Rp ${amount.toLocaleString("id-ID")}\n📝 Catatan: ${classification.note}`,
-      transaction: createResult.data,
+      message: replyText,
+      transaction: transaction,
     },
   };
 };
