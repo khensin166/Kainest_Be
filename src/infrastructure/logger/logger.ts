@@ -52,14 +52,18 @@ const fileFormat = combine(
   })
 );
 
-export const logger = winston.createLogger({
-  level: 'info',
-  format: fileFormat,
-  transports: [
-    // Output ke terminal
-    new winston.transports.Console({
-      format: consoleFormat,
-    }),
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL;
+
+const transportsList: winston.transport[] = [
+  // Output ke terminal
+  new winston.transports.Console({
+    format: consoleFormat,
+  }),
+];
+
+// File logging hanya aktif jika BUKAN di Vercel (karena Vercel itu serverless read-only filesystem)
+if (!isVercel) {
+  transportsList.push(
     // Output ke file error terpisah
     new winston.transports.File({ 
       filename: 'logs/error.log', 
@@ -72,6 +76,12 @@ export const logger = winston.createLogger({
       filename: 'logs/wabot-webhook.log',
       maxsize: 5242880, // 5MB
       maxFiles: 5,
-    }),
-  ],
+    })
+  );
+}
+
+export const logger = winston.createLogger({
+  level: 'info',
+  format: fileFormat,
+  transports: transportsList,
 });
