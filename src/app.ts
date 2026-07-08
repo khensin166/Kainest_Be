@@ -13,14 +13,18 @@ import { notificationRoute } from "./features/notification/presentation/notifica
 import { feedbackRoute } from "./features/feedback/presentation/feedbackRoute.js";
 import { systemUpdateRoute } from "./features/systemUpdate/presentation/systemUpdateRoute.js";
 import { cors } from 'hono/cors'
+import { secureHeaders } from 'hono/secure-headers'
 import { loggingMiddleware } from './infrastructure/middlewares/LoggingMiddleware.js'
 
 const app = new Hono()
 
+// Security Hardening: Tambahkan HTTP Security Headers
+app.use('*', secureHeaders())
+
 // Hanya izinkan request dari frontend Vue Anda (default Vite)
 // Gunakan CORS dengan credentials untuk session cookie
 app.use('*', cors({
-  origin: ['https://kainest.kenantomfie.site', 'http://localhost:5173', 'https://staging.kainest.kenantomfie.site'],
+  origin: ['https://kainest.kenantomfie.site', 'http://localhost:5173', 'https://staging.kainest.kenantomfie.site', 'https://gowa.kenantomfie.com',],
   credentials: true,
 }))
 

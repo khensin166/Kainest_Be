@@ -1,0 +1,86 @@
+---
+- name: Kainest Backend - Deploy & Force Update
+  hosts: webservers
+  become: no
+  vars:
+    project_dir: "/opt/kainest-backend"
+    
+  tasks:
+    - name: Membuat folder proyek di server target
+      file:
+        path: "{{ project_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Menyalin file docker-compose.deploy.yml ke server target
+      copy:
+        src: ../../docker-compose.deploy.yml
+        dest: "{{ project_dir }}/docker-compose.yml"
+
+    - name: Generate file .env di server target
+      copy:
+        content: |
+          NODE_ENV=production
+          TARGET_IMAGE={{ target_image }}
+          DATABASE_URL={{ database_url }}
+          DIRECT_URL={{ direct_url }}
+          BETTER_AUTH_SECRET={{ better_auth_secret }}
+          BETTER_AUTH_URL={{ better_auth_url }}
+          JWT_SECRET={{ jwt_secret }}
+          GOOGLE_CLIENT_ID={{ google_client_id }}
+          GOOGLE_CLIENT_SECRET={{ google_client_secret }}
+          GITHUB_CLIENT_ID={{ github_client_id }}
+          GITHUB_CLIENT_SECRET={{ github_client_secret }}
+          GROQ_API_KEY={{ groq_api_key }}
+          RESEND_API_KEY={{ resend_api_key }}
+          RESEND_FROM_EMAIL={{ resend_from_email }}
+          CLOUDINARY_CLOUD_NAME={{ cloudinary_cloud_name }}
+          CLOUDINARY_API_KEY={{ cloudinary_api_key }}
+          CLOUDINARY_API_SECRET={{ cloudinary_api_secret }}
+          GITHUB_TOKEN={{ github_token }}
+          FRONTEND_URL={{ frontend_url }}
+          GOWA_BASE_URL={{ gowa_base_url }}
+          WA_BOT_API_KEY={{ gowa_api_key }}
+          BOT_ENV_MODE={{ bot_env_mode }}
+          STAGING_ALLOWED_NUMBERS={{ staging_allowed_numbers }}
+        dest: "{{ project_dir }}/.env"
+        mode: '0600'
+      no_log: true
+    
+    - name: Memastikan jaringan global 'kainest_net' tersedia
+      command: docker network create kainest_net
+      register: network_result
+      failed_when: 
+        - network_result.rc != 0
+        - "'already exists' not in network_result.stderr"
+      changed_when: network_result.rc == 0
+
+    - name: Memaksa pembaruan (Pull & Up) Docker Compose
+      command: docker compose up -d --pull always --force-recreate --remove-orphans
+      args:
+        chdir: "{{ project_dir }}"
+      register: compose_result
+      failed_when: compose_result.rc != 0
+      ignore_errors: yes
+
+    - name: Debug Docker Compose Output (Jika Gagal)
+      debug:
+        msg: |
+          STDOUT: {{ compose_result.stdout }}
+          STDERR: {{ compose_result.stderr }}
+      when: compose_result.rc != 0
+
+    - name: Fail jika Docker Compose Gagal
+      fail:
+        msg: "Deployment gagal pada tahapan Docker Compose."
+      when: compose_result.rc != 0
+
+    - name: Hapus image lama yang tidak terpakai (Prune)
+      command: docker image prune -f
+
+    - name: Verifikasi Container Berjalan
+      command: "docker inspect kainest-backend --format='{{ '{{' }}.State.Status{{ '}}' }}'"
+      register: container_status
+      retries: 5
+      delay: 5
+      until: container_status.stdout == "running"
