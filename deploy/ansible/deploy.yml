@@ -44,6 +44,7 @@
           SPREADSHEET_ID={{ spreadsheet_id }}
           GOOGLE_API_KEY_SPREADSHEET={{ google_api_key_spreadsheet }}
           ENABLE_SCHEDULER={{ enable_scheduler }}
+          GRAFANA_LOKI_URL={{ grafana_loki_url }}
         dest: "{{ project_dir }}/.env"
         mode: '0600'
       no_log: true

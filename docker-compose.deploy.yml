@@ -14,6 +14,16 @@ services:
     # Optional: If you have persistent files like logs or local uploads
     volumes:
       - kainest_be_logs:/app/logs
+    logging:
+      driver: loki
+      options:
+        loki-url: "${GRAFANA_LOKI_URL}"
+        loki-external-labels: job=docker,environment=production,service=kainest-backend
+        loki-retries: "2"
+        loki-max-backoff: "1000ms"
+        mode: non-blocking
+        max-buffer-size: "4m"
+
 
 networks:
   kainest_net:
