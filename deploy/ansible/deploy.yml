@@ -41,6 +41,9 @@
           GOWA_BASE_URL={{ gowa_base_url }}
           WA_BOT_API_KEY={{ gowa_api_key }}
           BOT_ENV_MODE={{ bot_env_mode }}
+          SPREADSHEET_ID={{ spreadsheet_id }}
+          GOOGLE_API_KEY_SPREADSHEET={{ google_api_key_spreadsheet }}
+          ENABLE_SCHEDULER={{ enable_scheduler }}
         dest: "{{ project_dir }}/.env"
         mode: '0600'
       no_log: true
