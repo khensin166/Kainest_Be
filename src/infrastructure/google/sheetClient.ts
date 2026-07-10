@@ -40,7 +40,7 @@ export const fetchShiftDataFromSheet = async (): Promise<ShiftRow[]> => {
     const currentTabName = `${monthName}'${shortYear}`;
     const range = `${currentTabName}!A3:AZ100`;
 
-    logger.info(`[SheetClient] Membaca dari tab: ${currentTabName}`);
+    logger.debug(`[SheetClient] Membaca dari tab: ${currentTabName}`);
 
     try {
         const response = await sheets.spreadsheets.values.get({
@@ -95,7 +95,7 @@ export const fetchShiftDataFromSheet = async (): Promise<ShiftRow[]> => {
             }
         }
 
-        logger.info(`[SheetClient] Berhasil membaca ${allShifts.length} data shift.`);
+        logger.debug(`[SheetClient] Berhasil membaca ${allShifts.length} data shift.`);
         return allShifts;
     } catch (error: any) {
         logger.error("[SheetClient] Gagal membaca Spreadsheet", { error: error.message });

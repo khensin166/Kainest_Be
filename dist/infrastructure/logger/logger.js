@@ -64,8 +64,9 @@ if (!isVercel) {
         maxFiles: 5,
     }));
 }
+const logLevel = process.env.NODE_ENV === 'production' ? 'info' : 'debug';
 export const logger = winston.createLogger({
-    level: 'info',
+    level: logLevel,
     format: fileFormat,
     transports: transportsList,
 });

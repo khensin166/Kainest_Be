@@ -6,7 +6,7 @@ import { logger } from "../logger/logger.js";
  */
 export const transcribeAudio = async (audioBuffer) => {
     const cfWorkerUrl = "https://kainest-ear.kenan2020oke.workers.dev";
-    logger.info("Transcribing audio using Cloudflare Whisper...", { byteLength: audioBuffer.length });
+    logger.debug("Transcribing audio using Cloudflare Whisper...", { byteLength: audioBuffer.length });
     try {
         const cfResponse = await fetch(cfWorkerUrl, {
             method: "POST",
@@ -19,7 +19,7 @@ export const transcribeAudio = async (audioBuffer) => {
         if (cfResult.status === "error" || !cfResult.text) {
             throw new Error(cfResult.message || "Gagal mentranskripsi suara");
         }
-        logger.info("Transcription successful", { textLength: cfResult.text.length });
+        logger.debug("Transcription successful", { textLength: cfResult.text.length });
         return cfResult.text.trim();
     }
     catch (error) {

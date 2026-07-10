@@ -26,7 +26,7 @@ export const groqService = {
       max_tokens: 300, // Batasi agar tidak terlalu panjang (hemat waktu)
     };
 
-    logger.info({
+    logger.debug({
       message: "Sending payload to Groq AI",
       payload,
     });
@@ -36,7 +36,7 @@ export const groqService = {
 
       const responseContent = completion.choices[0]?.message?.content || "Maaf, saya sedang pusing.";
 
-      logger.info({
+      logger.debug({
         message: "Received response from Groq AI",
         response: responseContent,
       });

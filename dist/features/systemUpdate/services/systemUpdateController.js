@@ -110,7 +110,7 @@ export async function syncGithubReleasesController(c) {
                 blasted++;
             }
         }
-        logger.info("[SystemUpdate] Sync completed", { newlyAdded, blasted });
+        logger.debug("[SystemUpdate] Sync completed", { newlyAdded, blasted });
         return c.json({ success: true, newlyAdded, blasted });
     }
     catch (error) {

@@ -38,7 +38,7 @@ async function sendTextViaGowa(phone: string, message: string): Promise<void> {
     throw new Error(`GOWA send failed [${resp.status}]: ${text}`);
   }
 
-  logger.info("Outgoing text via GOWA", { phone, status: resp.status });
+  logger.debug("Outgoing text via GOWA", { phone, status: resp.status });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -127,7 +127,7 @@ export const gowaWebhookController = async (c: Context) => {
     // Tentukan timestamp
     const timestamp: number = data.timestamp ? Math.floor(new Date(data.timestamp).getTime() / 1000) : Math.floor(Date.now() / 1000);
 
-    logger.info("Incoming Webhook from GOWA", {
+    logger.debug("Incoming Webhook from GOWA", {
       event,
       sender: senderPhone,
       group: groupId || "personal",
@@ -137,19 +137,19 @@ export const gowaWebhookController = async (c: Context) => {
 
     // 2. Abaikan pesan dari diri sendiri (bot)
     if (isFromMe) {
-      logger.info("Ignored own message (is_from_me=true)", { sender: senderPhone });
+      logger.debug("Ignored own message (is_from_me=true)", { sender: senderPhone });
       return c.json({ success: true, ignored: true });
     }
 
     // 3. Abaikan event yang bukan pesan teks
     if (event !== "message" && event !== "text" && event !== "Message") {
-      logger.info("Ignored non-message event", { event });
+      logger.debug("Ignored non-message event", { event });
       return c.json({ success: true, ignored: true, reason: "non-message event" });
     }
 
     // 4. Abaikan pesan kosong (stiker/gambar tanpa caption) jika bukan pesan audio
     if (!hasText && !isAudio) {
-      logger.info("Ignored empty message body and non-audio", { sender: senderPhone });
+      logger.debug("Ignored empty message body and non-audio", { sender: senderPhone });
       return c.json({ success: true, ignored: true, reason: "empty body" });
     }
 
@@ -159,12 +159,12 @@ export const gowaWebhookController = async (c: Context) => {
         senderPhone.endsWith(n) || n.endsWith(senderPhone)
       );
       if (!isAllowed) {
-        logger.info("Staging: silent ignore (not allowed number)", { sender: senderPhone });
+        logger.debug("Staging: silent ignore (not allowed number)", { sender: senderPhone });
         return c.json({ success: true, ignored: true, reason: "staging_not_allowed" });
       }
       // Lepas prefix !dev jika ada (pengecualian untuk pesan audio karena tidak bisa diberi prefix teks)
       if (!isAudio && !textBody.toLowerCase().startsWith("!dev ")) {
-        logger.info("Staging: silent ignore (missing !dev prefix)", { sender: senderPhone });
+        logger.debug("Staging: silent ignore (missing !dev prefix)", { sender: senderPhone });
         return c.json({ success: true, ignored: true, reason: "staging_missing_prefix" });
       }
       // textBody sudah di-strip di use case — kita kirim tanpa prefix ke downstream
@@ -232,7 +232,7 @@ export const gowaWebhookController = async (c: Context) => {
         // 8. Tangani hasil: ignored (silent)
         if (result.isIgnored) {
           const reason = (result as any).ignoreReason || "unknown";
-          logger.info(`Silent ignore (${reason})`, {
+          logger.debug(`Silent ignore (${reason})`, {
             sender: senderPhone,
             group: groupId || "personal",
             latency_ms: latencyMs,
@@ -281,7 +281,7 @@ export const gowaWebhookController = async (c: Context) => {
           );
         }
 
-        logger.info("Transaction processed successfully", {
+        logger.debug("Transaction processed successfully", {
           sender: senderPhone,
           group: groupId || "personal",
           transaction_id: result.data?.transaction?.id,
