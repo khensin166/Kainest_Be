@@ -129,7 +129,7 @@ export async function syncGithubReleasesController(c: Context) {
       }
     }
 
-    logger.info("[SystemUpdate] Sync completed", { newlyAdded, blasted });
+    logger.debug("[SystemUpdate] Sync completed", { newlyAdded, blasted });
     return c.json({ success: true, newlyAdded, blasted });
   } catch (error: any) {
     logger.error("[SystemUpdate] Error syncing:", { error: error.message });

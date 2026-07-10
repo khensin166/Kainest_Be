@@ -23,14 +23,14 @@ export const groqService = {
             temperature: 0.7, // Sedikit kreatif tapi tetap faktual
             max_tokens: 300, // Batasi agar tidak terlalu panjang (hemat waktu)
         };
-        logger.info({
+        logger.debug({
             message: "Sending payload to Groq AI",
             payload,
         });
         try {
             const completion = await groq.chat.completions.create(payload);
             const responseContent = completion.choices[0]?.message?.content || "Maaf, saya sedang pusing.";
-            logger.info({
+            logger.debug({
                 message: "Received response from Groq AI",
                 response: responseContent,
             });

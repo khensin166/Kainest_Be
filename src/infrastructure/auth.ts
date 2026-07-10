@@ -53,7 +53,7 @@ export const auth = betterAuth({
           subject: "Reset Kata Sandi Kainest",
           html: htmlBody,
         });
-        logger.info("[Auth] Email reset kata sandi terkirim:", { data });
+        logger.debug("[Auth] Email reset kata sandi terkirim:", { data });
       } catch (error: any) {
         logger.error("[Auth] Gagal mengirim email reset kata sandi:", { error: error.message });
       }

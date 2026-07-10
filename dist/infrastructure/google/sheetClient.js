@@ -28,7 +28,7 @@ export const fetchShiftDataFromSheet = async () => {
     const currentYear = now.getFullYear();
     const currentTabName = `${monthName}'${shortYear}`;
     const range = `${currentTabName}!A3:AZ100`;
-    logger.info(`[SheetClient] Membaca dari tab: ${currentTabName}`);
+    logger.debug(`[SheetClient] Membaca dari tab: ${currentTabName}`);
     try {
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
@@ -70,7 +70,7 @@ export const fetchShiftDataFromSheet = async () => {
                 }
             }
         }
-        logger.info(`[SheetClient] Berhasil membaca ${allShifts.length} data shift.`);
+        logger.debug(`[SheetClient] Berhasil membaca ${allShifts.length} data shift.`);
         return allShifts;
     }
     catch (error) {
