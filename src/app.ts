@@ -99,10 +99,6 @@ app.get('/doc', (c) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kainest System Flow</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script type="module">
-      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-      mermaid.initialize({ startOnLoad: true, theme: 'default' });
-    </script>
     <style>
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; color: #333; background: #fafafa; }
       pre { background: #f6f8fa; padding: 1rem; border-radius: 6px; overflow-x: auto; }
@@ -114,22 +110,26 @@ app.get('/doc', (c) => {
 </head>
 <body>
     <div id="content"></div>
-    <script>
-      // Escape backticks and dollars in the markdown content so it can be safely injected as a template literal
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+      
       const rawMd = \`${mdContent.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
       
-      const renderer = new marked.Renderer();
-      const originalCodeRenderer = renderer.code.bind(renderer);
-      
-      renderer.code = function(code, language, isEscaped) {
-        if (language === 'mermaid') {
-          return '<div class="mermaid">' + code + '</div>';
-        }
-        return originalCodeRenderer(code, language, isEscaped);
-      };
-      
-      marked.setOptions({ renderer });
+      // 1. Render Markdown ke HTML dengan fungsi parse dasar
       document.getElementById('content').innerHTML = marked.parse(rawMd);
+      
+      // 2. Ubah blok kode markdown (pre > code.language-mermaid) menjadi <div class="mermaid"> 
+      document.querySelectorAll('code.language-mermaid').forEach((el) => {
+          const pre = el.parentElement;
+          const div = document.createElement('div');
+          div.className = 'mermaid';
+          div.textContent = el.textContent; // Masukkan teks mentah script diagram
+          pre.parentNode.replaceChild(div, pre); // Ganti <pre> dengan <div>
+      });
+      
+      // 3. Jalankan renderer Mermaid pada semua div yang baru dibuat
+      mermaid.initialize({ startOnLoad: false, theme: 'default' });
+      await mermaid.run({ querySelector: '.mermaid' });
     </script>
 </body>
 </html>

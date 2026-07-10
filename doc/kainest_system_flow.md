@@ -79,25 +79,7 @@ sequenceDiagram
 ```
 
 ### Penjelasan Detail Tiap Aktor:
-
-1. **🤖 GOWA Bot (Go-WhatsApp):**
-   Tugasnya murni sebagai **Jembatan/Kurir** (*Gateway*). GOWA membaca pesan WA secara *real-time* lalu melempar isinya ke Backend, dan mengeksekusi pengiriman pesan dari Backend.
-2. **⚙️ Backend Hono (Node.js):**
-   Ini adalah **Otak Utama (Central Hub)**. Memegang *Business Logic* (Autentikasi, Filter Spam, Verifikasi, Limit Kantong). Merespons *webhook* GOWA secara asinkron agar tidak terjadi *timeout*.
-3. **🎙️ Cloudflare Whisper API:**
-   Berperan sebagai pengonversi suara ke teks. Menangani input berupa *Voice Note* untuk mempermudah pencatatan transaksi tanpa mengetik.
-4. **🧠 Groq AI:**
-   Berperan sebagai **Analis Data (Classifier)**. Mengubah *Natural Language* menjadi JSON terstruktur (menentukan kategori, tipe INCOME/EXPENSE, dan nominal).
-5. **👤 Frontend Web (Vue 3):**
-   Berperan sebagai **Dashboard & Control Panel** (Kategori, Tren Keuangan, Pengaturan).
-
----
-
-## 🔒 Sistem "Safe Mode" pada Staging
-Agar bot *Staging* tidak membocorkan pesan ke publik ketika sedang disempurnakan, Kainest Backend memiliki *Gatekeeper* khusus:
-1. Ia mendeteksi variabel `BOT_ENV_MODE=staging`.
-2. Saat ada Webhook masuk dari GOWA, Backend akan memeriksa `STAGING_ALLOWED_NUMBERS`.
-3. Jika pengirim BUKAN admin, Backend merespons Webhook GOWA dengan **HTTP 200 OK (ignored)**, sehingga bot diam seribu bahasa.
-4. Pengecualian pada *Voice Note* di mode staging, jika dari admin akan tetap diproses.
-
-![alt text](image.png)
+* **🤖 GOWA Bot (Go-WhatsApp):** Tugasnya murni sebagai Jembatan/Kurir (Gateway). GOWA membaca pesan WA secara real-time lalu melempar isinya ke Backend, dan mengeksekusi pengiriman pesan dari Backend.
+* **⚙️ Backend Hono (Node.js):** Ini adalah Otak Utama (Central Hub). Memegang Business Logic (Autentikasi, Filter Spam, Verifikasi, Limit Kantong). Merespons webhook GOWA secara asinkron agar tidak terjadi timeout.
+* **🎙️ Cloudflare Whisper API:** Berperan sebagai pengonversi suara ke teks. Menangani input berupa Voice Note untuk mempermudah pencatatan transaksi tanpa mengetik.
+* **🧠 Groq AI:** Bertugas melakukan klasifikasi transaksi secara otomatis berdasarkan teks, menjadi struktur data baku (Kategori, Jumlah, Tipe Pemasukan/Pengeluaran).
