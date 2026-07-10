@@ -116,4 +116,7 @@ jobs:
             -e "frontend_url=${{ vars.FRONTEND_URL }}" \
             -e "gowa_base_url=${{ vars.GOWA_BASE_URL }}" \
             -e "gowa_api_key=${{ vars.WA_BOT_API_KEY }}" \
-            -e "bot_env_mode=${{ vars.BOT_ENV_MODE }}" 
+            -e "bot_env_mode=${{ vars.BOT_ENV_MODE }}" \
+            -e "spreadsheet_id=${{ vars.SPREADSHEET_ID }}" \
+            -e "google_api_key_spreadsheet=${{ vars.GOOGLE_API_KEY_SPREADSHEET }}" \
+            -e "enable_scheduler=${{ vars.ENABLE_SCHEDULER }}" 
