@@ -41,25 +41,28 @@ const fileFormat = combine(traceIdFormat(), timestamp({ format: 'YYYY-MM-DD HH:m
     return log;
 }));
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL;
+const productionFormat = combine(traceIdFormat(), timestamp(), winston.format.json());
 const transportsList = [
     // Output ke terminal
     new winston.transports.Console({
-        format: consoleFormat,
+        format: process.env.NODE_ENV === 'production' ? productionFormat : consoleFormat,
     }),
 ];
 // File logging hanya aktif jika BUKAN di Vercel (karena Vercel itu serverless read-only filesystem)
 if (!isVercel) {
     transportsList.push(
-    // Output ke file error terpisah
+    // Output ke file error terpisah (format teks agar mudah dibaca manusia)
     new winston.transports.File({
         filename: 'logs/error.log',
         level: 'error',
+        format: fileFormat,
         maxsize: 5242880, // 5MB
         maxFiles: 5,
     }), 
     // Output webhook (incoming/outgoing) khusus untuk GOWA
     new winston.transports.File({
         filename: 'logs/wabot-webhook.log',
+        format: fileFormat,
         maxsize: 5242880, // 5MB
         maxFiles: 5,
     }));
@@ -67,6 +70,5 @@ if (!isVercel) {
 const logLevel = process.env.NODE_ENV === 'production' ? 'info' : 'debug';
 export const logger = winston.createLogger({
     level: logLevel,
-    format: fileFormat,
     transports: transportsList,
 });
