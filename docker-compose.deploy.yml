@@ -23,8 +23,9 @@ services:
         loki-max-backoff: "1000ms"
         mode: non-blocking
         max-buffer-size: "4m"
-
-
+    environment:
+      - NODE_OPTIONS=--max-old-space-size=256
+      # Kita batasin sesuai dengan sisa space ram di dalam server
 networks:
   kainest_net:
     external: true

@@ -41,4 +41,4 @@ COPY --from=builder /app/doc ./doc
 EXPOSE 3001
 
 # Start the application
-CMD ["npm", "start"]
+CMD ["node", "dist/server.js"]
