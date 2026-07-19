@@ -40,6 +40,7 @@
           FRONTEND_URL={{ frontend_url }}
           GOWA_BASE_URL={{ gowa_base_url }}
           WA_BOT_API_KEY={{ gowa_api_key }}
+          GOWA_DEVICE_ID={{ gowa_device_id }}
           BOT_ENV_MODE={{ bot_env_mode }}
           SPREADSHEET_ID={{ spreadsheet_id }}
           GOOGLE_API_KEY_SPREADSHEET={{ google_api_key_spreadsheet }}
