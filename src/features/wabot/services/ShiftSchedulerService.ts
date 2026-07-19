@@ -163,7 +163,7 @@ export async function scheduleRemindersForToday(): Promise<void> {
         const tomorrowShiftMap = new Map(tomorrowShifts.map((s) => [s.userId, s.shift_type]));
 
         let scheduled = 0;
-        const nowWib = new Date(new Date().toLocaleString("en-US", { timeZone }));
+        const nowWib = new Date(); // Sistem sudah dikunci ke Asia/Jakarta via Docker ENV TZ
 
         for (const userShift of todayShifts) {
             const user = userShift.user;
