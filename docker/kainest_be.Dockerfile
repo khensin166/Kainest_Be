@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install dependencies required for Prisma and native extensions 
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl tzdata
 
 # Copy package files
 COPY package.json package-lock.json* ./
@@ -24,10 +24,11 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl tzdata
 
-# Set environment to production
+# Set environment to production and timezone
 ENV NODE_ENV=production
+ENV TZ="Asia/Jakarta"
 
 # Copy built artifacts from builder
 COPY --from=builder /app/package.json ./package.json
