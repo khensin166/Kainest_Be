@@ -14,28 +14,21 @@ type ProcessBotTransactionInput = {
   timestamp?: number;
 };
 
-// Pesan onboarding untuk user baru yang mengirim pesan pertama kali di personal
+// Pesan onboarding untuk user baru yang mengirim pesan pertama kali
 const ONBOARDING_MESSAGE = `Kamu siapanyakkkk? 👀
 
-Kenalan dulu yuk! Kamu harus register dan daftarkan grup dan no wa supaya bisa mencatat bersama kami 🥳
+Kenalan dulu yuk! Kamu harus punya akun Kainest dan menautkan nomor WA kamu supaya bisa mencatat bersama kami 🥳
 
 Ikuti langkah ini ya:
 
-1️⃣ Buka web *kainest.kenantomfie.site*
-2️⃣ Pilih menu *Profile / Settings* di pojok kanan atas.
-3️⃣ Pilih tab *Pasangan*, lalu ambil & salin *Kode Undangan* kamu.
-4️⃣ Balas pesan ini dengan format:
-   \`!link KODE_UNIK_KAMU\`
+1️⃣ *Daftar akun* di web *kainest.kenantomfie.site* (klik Register jika belum punya akun)
+2️⃣ Lengkapi data profil kamu (Nama & Nomor HP)
+3️⃣ Masuk ke menu *Profile → Pasangan*, lalu salin *Kode Tautan* kamu (formatnya: !link KODE)
+4️⃣ Buat *Grup WhatsApp baru* dan masukkan aku (bot) ke dalamnya
+5️⃣ Kirim Kode Tautan tersebut *langsung di dalam Grup* yang baru dibuat
 
-5️⃣ Setelah sukses tertaut, buat grup baru dan masukkan aku (bot) ke dalamnya.
-   🤖 *Android*: Di chat ini, ketuk ikon titik tiga (⋮) ➡️ pilih *New Group*.
-   🍎 *iPhone*: Ketuk nama profil di atas ➡️ pilih *Create Group with...*
-
-6️⃣ Di grup tersebut, bot akan otomatis menyapa. Balas dengan ketik:
-   \`!aktifkan-kainest\`
-
-7️⃣ Selesai! Kamu bisa langsung catat pengeluaran 🎉
-   Contoh: \`Makan siang 20k\` atau \`Bensin 50rb\``;
+Selesai! Akun kamu langsung terhubung dan Grup langsung aktif untuk mencatat pengeluaran 🎉
+Contoh mencatat: \`Makan siang 20k\` atau \`Bensin 50rb\``;
 
 export const processBotTransactionUseCase = async (data: ProcessBotTransactionInput) => {
   // 1. Validasi tipe pesan dan transkripsi Audio (Voice Note)
@@ -77,38 +70,33 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
       return { success: false, status: 404, message: "❌ Kode tidak valid atau akun tidak ditemukan. Coba salin ulang kode dari web Kainest ya!" };
     }
 
+    // Simpan JID pengirim ke database (optional, bisa kosong jika belum ada)
     const jidToSave = rawSender.replace("@s.whatsapp.net", "").replace("@c.us", "").replace("@lid", "");
     await botTransactionRepository.updateWhatsappJid(userToLink.id, jidToSave);
 
-    return {
-      success: true,
-      data: {
-        message: `✅ Yeay! Akun Kainest *${userToLink.name || userToLink.email}* kini berhasil terhubung! 🎉\n\nSelanjutnya:\n1. Buat grup baru dan masukkan aku ke sana.\n2. Bot akan langsung menyapa! Balas dengan ketik *!aktifkan-kainest* di grupnya.`,
-        sendKicawSticker: true,
-      },
-    };
-  }
+    // Jika dikirim dari GRUP: langsung aktifkan grup sekaligus
+    if (data.groupId) {
+      await prisma.botActiveGroup.upsert({
+        where: { groupId: data.groupId },
+        create: { groupId: data.groupId },
+        update: {},
+      });
 
-  // 4. Intercept Perintah !aktifkan-kainest (harus dari grup)
-  if (lowerText === "!aktifkan-kainest") {
-    if (!data.groupId) {
       return {
-        success: false,
-        status: 400,
-        message: "⚠️ Perintah ini hanya bisa dijalankan di dalam grup ya!",
+        success: true,
+        data: {
+          message: `✅ Yeay! Akun Kainest *${userToLink.name || userToLink.email}* berhasil terhubung & Grup ini langsung AKTIF! 🎊\n\nKamu sudah bisa langsung mencatat di sini.\nContoh: *Makan siang 20k* atau *Bensin 50rb* 🎉`,
+          sendKicawSticker: true,
+        },
       };
     }
 
-    await prisma.botActiveGroup.upsert({
-      where: { groupId: data.groupId },
-      create: { groupId: data.groupId },
-      update: {},
-    });
-
+    // Jika dikirim via PRIVATE CHAT: akun tertaut tapi grup belum
     return {
       success: true,
       data: {
-        message: "✅ Grup ini berhasil didaftarkan sebagai tempat bertransaksi Kainest! 🎊\n\nSekarang kamu bisa langsung catat pengeluaran di sini.\nContoh: *Makan siang 20k* atau *Bensin 50rb*",
+        message: `✅ Akun Kainest *${userToLink.name || userToLink.email}* berhasil terhubung! 🎉\n\nSatu langkah lagi:\n→ Buat *Grup WhatsApp baru*, masukkan aku ke sana, lalu kirim ulang pesan \`!link ${code}\` di dalam grup agar grup tersebut aktif untuk mencatat.`,
+        sendKicawSticker: true,
       },
     };
   }
