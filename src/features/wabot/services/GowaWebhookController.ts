@@ -193,7 +193,9 @@ export const gowaWebhookController = async (c: Context) => {
           type = "audio";
           try {
             // Gunakan API GOWA untuk mendownload media
-            const downloadUrl = `${GOWA_BASE_URL}/message/${messageId}/download`;
+            // GOWA mewajibkan parameter ?phone= berisi JID pengirim/grup agar tahu sesi mana yang dipakai
+            const targetPhone = groupId || `${senderPhone}@s.whatsapp.net`;
+            const downloadUrl = `${GOWA_BASE_URL}/message/${messageId}/download?phone=${encodeURIComponent(targetPhone)}`;
             const resp = await fetch(downloadUrl, {
               headers: {
                 "X-Device-Id": GOWA_DEVICE_ID,

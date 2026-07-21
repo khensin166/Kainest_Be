@@ -15,6 +15,7 @@ type ProcessBotTransactionInput = {
 };
 
 // Pesan onboarding untuk user baru yang mengirim pesan pertama kali
+const HELP_FOOTER_CONST = "\n\n💡 Ketik *!help* untuk bantuan.";
 const ONBOARDING_MESSAGE = `Kamu siapanyakkkk? 👀
 
 Kenalan dulu yuk! Kamu harus punya akun Kainest dan menautkan nomor WA kamu supaya bisa mencatat bersama kami 🥳
@@ -28,7 +29,7 @@ Ikuti langkah ini ya:
 5️⃣ Kirim Kode Tautan tersebut *langsung di dalam Grup* yang baru dibuat
 
 Selesai! Akun kamu langsung terhubung dan Grup langsung aktif untuk mencatat pengeluaran 🎉
-Contoh mencatat: \`Makan siang 20k\` atau \`Bensin 50rb\``;
+Contoh mencatat: \`Makan siang 20k\` atau \`Bensin 50rb\`${HELP_FOOTER_CONST}`;
 
 export const processBotTransactionUseCase = async (data: ProcessBotTransactionInput) => {
   // 1. Validasi tipe pesan dan transkripsi Audio (Voice Note)
@@ -36,20 +37,20 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
 
   if (data.type === "audio" || data.type === "voice" || data.type === "ptt") {
     if (!data.audioBuffer) {
-      return { success: false, status: 400, message: "Audio buffer kosong", reaction: "❓" };
+      return { success: false, status: 400, message: `Audio buffer kosong${HELP_FOOTER_CONST}`, reaction: "❓", replyText: true };
     }
     try {
       textMsg = await transcribeAudio(data.audioBuffer);
     } catch (error: any) {
-      return { success: false, status: 500, message: error.message, reaction: "⚠️", replyText: true };
+      return { success: false, status: 500, message: `${error.message}${HELP_FOOTER_CONST}`, reaction: "⚠️", replyText: true };
     }
   } else if (data.type !== "text" && data.type !== "extendedTextMessage") {
-    return { success: false, status: 400, message: "Hanya pesan teks dan pesan suara (VN) yang didukung", reaction: "❓" };
+    return { success: false, status: 400, message: `Hanya pesan teks dan pesan suara (VN) yang didukung${HELP_FOOTER_CONST}`, reaction: "❓", replyText: true };
   }
 
   // Jika teks hasil transkripsi (atau teks asli) kosong
   if (!textMsg) {
-    return { success: false, status: 400, message: "Pesan kosong tidak dapat diproses", reaction: "❓" };
+    return { success: false, status: 400, message: `Pesan kosong tidak dapat diproses${HELP_FOOTER_CONST}`, reaction: "❓", replyText: true };
   }
 
   const lowerText = textMsg.toLowerCase();
@@ -62,12 +63,12 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   if (lowerText.startsWith("!link ")) {
     const code = textMsg.split(" ")[1];
     if (!code) {
-      return { success: false, status: 400, message: "Format salah. Gunakan: !link KODE_UNIK_KAMU" };
+      return { success: false, status: 400, message: `Format salah. Gunakan: !link KODE_UNIK_KAMU${HELP_FOOTER_CONST}`, replyText: true };
     }
 
     const userToLink = await botTransactionRepository.getUserByInvitationCode(code);
     if (!userToLink) {
-      return { success: false, status: 404, message: "❌ Kode tidak valid atau akun tidak ditemukan. Coba salin ulang kode dari web Kainest ya!" };
+      return { success: false, status: 404, message: `❌ Kode tidak valid atau akun tidak ditemukan. Coba salin ulang kode dari web Kainest ya!${HELP_FOOTER_CONST}`, replyText: true };
     }
 
     // Simpan JID pengirim ke database (optional, bisa kosong jika belum ada)
@@ -85,7 +86,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
       return {
         success: true,
         data: {
-          message: `✅ Yeay! Akun Kainest *${userToLink.name || userToLink.email}* berhasil terhubung & Grup ini langsung AKTIF! 🎊\n\nKamu sudah bisa langsung mencatat di sini.\nContoh: *Makan siang 20k* atau *Bensin 50rb* 🎉`,
+          message: `✅ Yeay! Akun Kainest *${userToLink.name || userToLink.email}* berhasil terhubung & Grup ini langsung AKTIF! 🎊\n\nKamu sudah bisa langsung mencatat di sini.\nContoh: *Makan siang 20k* atau *Bensin 50rb* 🎉${HELP_FOOTER_CONST}`,
           sendKicawSticker: true,
         },
       };
@@ -95,7 +96,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     return {
       success: true,
       data: {
-        message: `✅ Akun Kainest *${userToLink.name || userToLink.email}* berhasil terhubung! 🎉\n\nSatu langkah lagi:\n→ Buat *Grup WhatsApp baru*, masukkan aku ke sana, lalu kirim ulang pesan \`!link ${code}\` di dalam grup agar grup tersebut aktif untuk mencatat.`,
+        message: `✅ Akun Kainest *${userToLink.name || userToLink.email}* berhasil terhubung! 🎉\n\nSatu langkah lagi:\n→ Buat *Grup WhatsApp baru*, masukkan aku ke sana, lalu kirim ulang pesan \`!link ${code}\` di dalam grup agar grup tersebut aktif untuk mencatat.${HELP_FOOTER_CONST}`,
         sendKicawSticker: true,
       },
     };
@@ -324,7 +325,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
       reaction: "👀",
       replyText: true, // tetap balas teks
       data: {
-        message: `Halo, ${user.name || "Kak"}! 👋 Siap mencatat keuanganmu hari ini!\n\nLangsung ketik transaksimu ya, contoh:\n*Makan siang 20k* atau *Bensin 50rb* 😊`,
+        message: `Halo, ${user.name || "Kak"}! 👋 Siap mencatat keuanganmu hari ini!\n\nLangsung ketik transaksimu ya, contoh:\n*Makan siang 20k* atau *Bensin 50rb* 😊${HELP_FOOTER_CONST}`,
       },
     };
   }
@@ -339,13 +340,13 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   const classification = await classifyTransactionUseCase(user.id, data.text);
 
   if (!classification.success || !classification.categoryId) {
-    return { success: false, status: 400, message: "Gagal mengklasifikasikan pengeluaran.", reaction: "❓" };
+    return { success: false, status: 400, message: `Gagal mengklasifikasikan pengeluaran.${HELP_FOOTER_CONST}`, reaction: "❓", replyText: true };
   }
 
   // 9. Catat Transaksi
   const amount = classification.amount || 0;
   if (amount <= 0) {
-    return { success: false, status: 400, message: "Nominal pengeluaran tidak terdeteksi atau 0.", reaction: "❓" };
+    return { success: false, status: 400, message: `Nominal pengeluaran tidak terdeteksi atau 0.${HELP_FOOTER_CONST}`, reaction: "❓", replyText: true };
   }
 
   const txDate = data.timestamp ? new Date(data.timestamp * 1000).toISOString() : new Date().toISOString();
@@ -360,7 +361,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   });
 
   if (!createResult.success) {
-    return { success: false, status: 500, message: createResult.message };
+    return { success: false, status: 500, message: `${createResult.message}${HELP_FOOTER_CONST}`, replyText: true };
   }
 
   // 10. Kembalikan Response Sukses
