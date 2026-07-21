@@ -83,6 +83,7 @@ model User {
   sessions         Session[]
   accounts         Account[]
   waBotConfig      WaBotConfig?
+  botActiveGroups  BotActiveGroup[]
 
   // --- NEW: ROLE & PERMISSIONS (Better Auth Admin Plugin) ---
   role        String?  @default("user")
@@ -414,9 +415,12 @@ model Verification {
 model BotActiveGroup {
   id        String   @id @default(dbgenerated("gen_random_uuid()"))
   groupId   String   @unique
+  userId    String?  // User pertama yg terkait grup ini (auto-relink)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
 
   @@index([groupId])
+  @@index([userId])
   @@schema("kainest")
 }
 

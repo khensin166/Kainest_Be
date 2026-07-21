@@ -84,6 +84,18 @@
   - Penyebab: Saat membuat snapshot kantong untuk bulan baru, sistem hanya membaca kolom `limitAmount` tanpa menghitung ulang nilai persentase terhadap gaji terkini.
   - Perbaikan di `BudgetRepository.ts` → fungsi `syncMonthlyHistory`: Sekarang sistem mengecek kolom `percentage`. Jika bernilai `> 0`, maka limit dihitung ulang secara otomatis dengan formula `Math.floor((percentage / 100) * salary)`, memastikan template kantong bulan baru selalu akurat.
 
+## Update 21 Juli 2026
+- **Frontend**:
+  - Menyederhanakan alur *Onboarding* dengan menghapus langkah usang "Pairing Perangkat" di `pageGuides.js`.
+  - Mengotomatiskan pemicu modal "Kelola Kantong" di Dashboard agar tampil secara langsung bagi pengguna yang belum mengatur kantong mereka.
+- **Backend (WA Bot Commands & Universal Footer)**:
+  - Mengimplementasikan sejumlah *command* baru untuk berinteraksi dengan bot WhatsApp: `!today`, `!weekly`, `!monthly`, `!balance`, `!top`, `!recent`, `!undo`, dan `!help` melalui `ProcessBotTransactionUseCase.ts`.
+  - Memperbaiki logika penghitungan `!balance` agar secara akurat menjumlahkan transaksi (INCOME dan EXPENSE) berdasarkan bulan berjalan dan menggabungkannya dengan batas/anggaran (*limit*) dari `BudgetPocket`.
+  - Menambahkan *Universal Help Footer* (`💡 Ketik !help untuk bantuan.`) ke seluruh balasan bot (termasuk *error*, *greeting*, dan perintah yang sukses) agar pengguna awam selalu tahu cara meminta bantuan.
+- **Backend (Perbaikan Voice Note GOWA)**:
+  - Memperbaiki *bug* kegagalan transkripsi suara (pesan *error* `"Audio buffer kosong"` dan `"phone: cannot be blank"`). Akar masalahnya adalah hilangnya parameter `?phone=` pada *endpoint download media* GOWA.
+  - Memodifikasi `GowaWebhookController.ts` agar menyisipkan `targetPhone` di kueri URL saat mengunduh VN, sehingga data audio dapat diteruskan dengan sukses ke layanan Cloudflare Whisper untuk ditranskripsi ke teks.
+
 ## Catatan untuk Agent Selanjutnya
 1. Pastikan selalu mematuhi instruksi **Web Application Development** yang mengutamakan UI yang estetik, tidak generik, dan menggunakan animasi ringan (micro-animations).
 2. Jika ada masalah terkait rute autentikasi *Better Auth*, perhatikan versi terbarunya (khususnya perbedaan antara endpoint lama `/forget-password` dengan yang baru `/request-password-reset`).
@@ -174,3 +186,19 @@ docker compose down
 docker compose up -d
 ```
 
+## Update 21 Juli 2026 (Part 2: GOWA Migration & Blast System)
+- **Frontend (WhatsApp Bot - Multi Device Hub)**:
+  - Halaman WaBotPage.vue (/app/wabot) dirombak menjadi **GOWA Device Hub**. Mendukung koneksi multi-device secara *native* dengan merender grid kartu (Staging, Production, dll).
+  - Integrasi koneksi *real-time* via **WebSocket** (ws://gowa.../ws) per device untuk menarik status (CONNECTED, UNPAIRED) dan men-generate QR base64 secara instan ketika device terputus.
+  - Store Pinia baru useGowaStore.js memanggil endpoint melalui proxy backend (menghindari CORS dan menyembunyikan kredensial GOWA).
+
+- **Frontend (WhatsApp API - Blast Dashboard)**:
+  - Halaman WaBotApiPage.vue (/app/wabot-api) dirombak menjadi **Blast Message Center**. 
+  - Mendukung seleksi banyak grup aktif via *checkbox*, filter status (Terhubung/Perlu Relink), dan 3 *template* pesan instan.
+
+- **Backend (Auto-Relink & GOWA Proxy)**:
+  - Modifikasi schema Prisma (BotActiveGroup kini merelasikan userId).
+  - Fitur **Auto-Relink**: Pada ProcessBotTransactionUseCase.ts, jika grup terdaftar belum memiliki tautan userId, sistem akan otomatis mencari JID pengirim pesan ke tabel User dan menautkannya.
+  - Penambahan Controller baru (BlastController.ts) untuk melayani *bulk message* dengan jeda 1.5 detik per pesan ke GOWA.
+  - Penambahan Controller baru (DeviceProxyController.ts) yang bertugas mem- *proxy* HTTP *requests* (GET/POST/DELETE) dari Web Admin menuju GOWA API, guna melewati limitasi **CORS browser** serta mengamankan Basic Auth credential. (Note: Koneksi Websocket wss:// dari frontend tetap terhubung langsung ke GOWA karena WS tidak diblokir CORS browser).
+  - Skema PostgreSQL public."BotActiveGroup" (View) telah di- *drop* dan dibuat ulang untuk mengekspos kolom userId.

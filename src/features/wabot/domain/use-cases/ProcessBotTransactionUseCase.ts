@@ -71,7 +71,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
       return { success: false, status: 404, message: `❌ Kode tidak valid atau akun tidak ditemukan. Coba salin ulang kode dari web Kainest ya!${HELP_FOOTER_CONST}`, replyText: true };
     }
 
-    // Simpan JID pengirim ke database (optional, bisa kosong jika belum ada)
+      // Simpan JID pengirim ke database (optional, bisa kosong jika belum ada)
     const jidToSave = rawSender.replace("@s.whatsapp.net", "").replace("@c.us", "").replace("@lid", "");
     await botTransactionRepository.updateWhatsappJid(userToLink.id, jidToSave);
 
@@ -79,8 +79,8 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     if (data.groupId) {
       await prisma.botActiveGroup.upsert({
         where: { groupId: data.groupId },
-        create: { groupId: data.groupId },
-        update: {},
+        create: { groupId: data.groupId, userId: userToLink.id },
+        update: { userId: userToLink.id }, // Update userId jika grup sudah ada (relink)
       });
 
       return {
@@ -314,6 +314,15 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
           message: `👋 Halo, ${user.name || "Kak"}! Grup ini belum terdaftar untuk Kainest.\n\nUntuk mengaktifkannya, kirim perintah berikut di grup ini:\n  \`!link KODE_TAUTANMU\`\n\n_(Temukan kodemu di web Kainest → Profil → Pasangan)_\n\n💡 Ketik !help untuk bantuan.`,
         }
       };
+    }
+
+    // ✨ AUTO-RELINK: Jika grup aktif tapi userId masih kosong, isi otomatis dari sender
+    if (activeGroup && !activeGroup.userId) {
+      logger.info(`[Auto-Relink] Grup ${data.groupId} belum punya userId, mencoba mengaitkan dengan user ${user.id} (${user.name || user.email})`);
+      await prisma.botActiveGroup.update({
+        where: { groupId: data.groupId },
+        data: { userId: user.id },
+      });
     }
   }
 
