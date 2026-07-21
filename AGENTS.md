@@ -84,6 +84,18 @@
   - Penyebab: Saat membuat snapshot kantong untuk bulan baru, sistem hanya membaca kolom `limitAmount` tanpa menghitung ulang nilai persentase terhadap gaji terkini.
   - Perbaikan di `BudgetRepository.ts` → fungsi `syncMonthlyHistory`: Sekarang sistem mengecek kolom `percentage`. Jika bernilai `> 0`, maka limit dihitung ulang secara otomatis dengan formula `Math.floor((percentage / 100) * salary)`, memastikan template kantong bulan baru selalu akurat.
 
+## Update 21 Juli 2026
+- **Frontend**:
+  - Menyederhanakan alur *Onboarding* dengan menghapus langkah usang "Pairing Perangkat" di `pageGuides.js`.
+  - Mengotomatiskan pemicu modal "Kelola Kantong" di Dashboard agar tampil secara langsung bagi pengguna yang belum mengatur kantong mereka.
+- **Backend (WA Bot Commands & Universal Footer)**:
+  - Mengimplementasikan sejumlah *command* baru untuk berinteraksi dengan bot WhatsApp: `!today`, `!weekly`, `!monthly`, `!balance`, `!top`, `!recent`, `!undo`, dan `!help` melalui `ProcessBotTransactionUseCase.ts`.
+  - Memperbaiki logika penghitungan `!balance` agar secara akurat menjumlahkan transaksi (INCOME dan EXPENSE) berdasarkan bulan berjalan dan menggabungkannya dengan batas/anggaran (*limit*) dari `BudgetPocket`.
+  - Menambahkan *Universal Help Footer* (`💡 Ketik !help untuk bantuan.`) ke seluruh balasan bot (termasuk *error*, *greeting*, dan perintah yang sukses) agar pengguna awam selalu tahu cara meminta bantuan.
+- **Backend (Perbaikan Voice Note GOWA)**:
+  - Memperbaiki *bug* kegagalan transkripsi suara (pesan *error* `"Audio buffer kosong"` dan `"phone: cannot be blank"`). Akar masalahnya adalah hilangnya parameter `?phone=` pada *endpoint download media* GOWA.
+  - Memodifikasi `GowaWebhookController.ts` agar menyisipkan `targetPhone` di kueri URL saat mengunduh VN, sehingga data audio dapat diteruskan dengan sukses ke layanan Cloudflare Whisper untuk ditranskripsi ke teks.
+
 ## Catatan untuk Agent Selanjutnya
 1. Pastikan selalu mematuhi instruksi **Web Application Development** yang mengutamakan UI yang estetik, tidak generik, dan menggunakan animasi ringan (micro-animations).
 2. Jika ada masalah terkait rute autentikasi *Better Auth*, perhatikan versi terbarunya (khususnya perbedaan antara endpoint lama `/forget-password` dengan yang baru `/request-password-reset`).
