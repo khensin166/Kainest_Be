@@ -10,6 +10,13 @@ import {
 import { addBotTransactionController } from "../services/WaBotTransactionController.js";
 import { gowaWebhookController } from "../services/GowaWebhookController.js";
 import { getActiveGroupsController, blastMessageController } from "../services/BlastController.js";
+import {
+  proxyGetDevices,
+  proxyCreateDevice,
+  proxyDeleteDevice,
+  proxyLogoutDevice,
+  proxyGetDeviceLogin
+} from "../services/DeviceProxyController.js";
 
 export const wabotRoute = new Hono();
 
@@ -46,3 +53,14 @@ wabotRoute.use("/active-groups", authMiddleware);
 wabotRoute.use("/blast", authMiddleware);
 wabotRoute.get("/active-groups", getActiveGroupsController);
 wabotRoute.post("/blast", blastMessageController);
+
+// ==========================================
+// Rute Proxy ke GOWA Device Hub (Admin Only)
+// ==========================================
+wabotRoute.use("/devices", authMiddleware);
+wabotRoute.use("/devices/*", authMiddleware);
+wabotRoute.get("/devices", proxyGetDevices);
+wabotRoute.post("/devices", proxyCreateDevice);
+wabotRoute.delete("/devices/:id", proxyDeleteDevice);
+wabotRoute.post("/devices/:id/logout", proxyLogoutDevice);
+wabotRoute.get("/devices/:id/login", proxyGetDeviceLogin);
