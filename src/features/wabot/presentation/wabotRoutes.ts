@@ -9,6 +9,7 @@ import {
 } from "../services/WaBotConfigController.js";
 import { addBotTransactionController } from "../services/WaBotTransactionController.js";
 import { gowaWebhookController } from "../services/GowaWebhookController.js";
+import { getActiveGroupsController, blastMessageController } from "../services/BlastController.js";
 
 export const wabotRoute = new Hono();
 
@@ -37,3 +38,11 @@ wabotRoute.post("/transactions", botAuthMiddleware, addBotTransactionController)
 // ==========================================
 // Endpoint ini yang akan dipanggil oleh GOWA setiap ada pesan masuk
 wabotRoute.post("/webhook/gowa", gowaWebhookController);
+
+// ==========================================
+// Rute Blast Message & Active Groups (Admin Only)
+// ==========================================
+wabotRoute.use("/active-groups", authMiddleware);
+wabotRoute.use("/blast", authMiddleware);
+wabotRoute.get("/active-groups", getActiveGroupsController);
+wabotRoute.post("/blast", blastMessageController);
