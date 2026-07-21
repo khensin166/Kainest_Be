@@ -186,3 +186,19 @@ docker compose down
 docker compose up -d
 ```
 
+## Update 21 Juli 2026 (Part 2: GOWA Migration & Blast System)
+- **Frontend (WhatsApp Bot - Multi Device Hub)**:
+  - Halaman WaBotPage.vue (/app/wabot) dirombak menjadi **GOWA Device Hub**. Mendukung koneksi multi-device secara *native* dengan merender grid kartu (Staging, Production, dll).
+  - Integrasi koneksi *real-time* via **WebSocket** (ws://gowa.../ws) per device untuk menarik status (CONNECTED, UNPAIRED) dan men-generate QR base64 secara instan ketika device terputus.
+  - Store Pinia baru useGowaStore.js memanggil endpoint melalui proxy backend (menghindari CORS dan menyembunyikan kredensial GOWA).
+
+- **Frontend (WhatsApp API - Blast Dashboard)**:
+  - Halaman WaBotApiPage.vue (/app/wabot-api) dirombak menjadi **Blast Message Center**. 
+  - Mendukung seleksi banyak grup aktif via *checkbox*, filter status (Terhubung/Perlu Relink), dan 3 *template* pesan instan.
+
+- **Backend (Auto-Relink & GOWA Proxy)**:
+  - Modifikasi schema Prisma (BotActiveGroup kini merelasikan userId).
+  - Fitur **Auto-Relink**: Pada ProcessBotTransactionUseCase.ts, jika grup terdaftar belum memiliki tautan userId, sistem akan otomatis mencari JID pengirim pesan ke tabel User dan menautkannya.
+  - Penambahan Controller baru (BlastController.ts) untuk melayani *bulk message* dengan jeda 1.5 detik per pesan ke GOWA.
+  - Penambahan Controller baru (DeviceProxyController.ts) yang bertugas mem- *proxy* HTTP *requests* (GET/POST/DELETE) dari Web Admin menuju GOWA API, guna melewati limitasi **CORS browser** serta mengamankan Basic Auth credential. (Note: Koneksi Websocket wss:// dari frontend tetap terhubung langsung ke GOWA karena WS tidak diblokir CORS browser).
+  - Skema PostgreSQL public."BotActiveGroup" (View) telah di- *drop* dan dibuat ulang untuk mengekspos kolom userId.
