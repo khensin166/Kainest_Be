@@ -101,7 +101,185 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     };
   }
 
-  // 5. Deteksi pesan sapaan dasar & kata konfirmasi pendek
+  // 4. Intercept Perintah Bot (berawalan !) — Diproses SETELAH user lookup
+  //    Perintah ini memerlukan user valid. Cek user dahulu.
+  const isBotCommand = lowerText.startsWith("!") && !lowerText.startsWith("!link");
+
+  if (isBotCommand) {
+    const cmdUser = await botTransactionRepository.getUserByPhoneNumber(cleanSender);
+    if (!cmdUser) {
+      return {
+        success: true,
+        replyText: true,
+        data: { message: `${ONBOARDING_MESSAGE}` },
+      };
+    }
+
+    const now = new Date();
+    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+    const weekStart = new Date(now); weekStart.setDate(now.getDate() - 6); weekStart.setHours(0, 0, 0, 0);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const HELP_FOOTER = "\n\n💡 Ketik *!help* untuk bantuan.";
+
+    const formatIDR = (n: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
+    const sumExpense = (rows: any[]) => rows.filter(t => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
+    const sumIncome = (rows: any[]) => rows.filter(t => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
+
+    // === !today ===
+    if (lowerText === "!today") {
+      const txs = await prisma.transaction.findMany({
+        where: { userId: cmdUser.id, date: { gte: todayStart } },
+        include: { category: true },
+        orderBy: { date: "desc" },
+      });
+      if (!txs.length) return { success: true, replyText: true, data: { message: `📅 Hari ini belum ada transaksi yang tercatat.${HELP_FOOTER}` } };
+      const lines = txs.map(t => `${t.category?.icon || "📌"} ${t.category?.name || "-"}: ${t.type === "INCOME" ? "+" : "-"}${formatIDR(t.amount)} — ${t.note || "-"}`).join("\n");
+      return { success: true, replyText: true, data: { message: `📅 *Rekap Hari Ini*\n\n${lines}\n\n💰 Total Keluar: ${formatIDR(sumExpense(txs))}\n📈 Total Masuk: ${formatIDR(sumIncome(txs))}${HELP_FOOTER}` } };
+    }
+
+    // === !weekly ===
+    if (lowerText === "!weekly") {
+      const txs = await prisma.transaction.findMany({
+        where: { userId: cmdUser.id, date: { gte: weekStart } },
+        include: { category: true },
+        orderBy: { date: "desc" },
+      });
+      if (!txs.length) return { success: true, replyText: true, data: { message: `📆 7 hari terakhir belum ada transaksi yang tercatat.${HELP_FOOTER}` } };
+      return { success: true, replyText: true, data: { message: `📆 *Rekap 7 Hari Terakhir*\n\n💰 Total Keluar: ${formatIDR(sumExpense(txs))}\n📈 Total Masuk: ${formatIDR(sumIncome(txs))}\n📋 Jumlah Transaksi: ${txs.length}${HELP_FOOTER}` } };
+    }
+
+    // === !monthly ===
+    if (lowerText === "!monthly") {
+      const txs = await prisma.transaction.findMany({
+        where: { userId: cmdUser.id, date: { gte: monthStart } },
+        include: { category: true },
+        orderBy: { date: "desc" },
+      });
+      if (!txs.length) return { success: true, replyText: true, data: { message: `🗓️ Bulan ini belum ada transaksi yang tercatat.${HELP_FOOTER}` } };
+      return { success: true, replyText: true, data: { message: `🗓️ *Rekap Bulan Ini*\n\n💰 Total Keluar: ${formatIDR(sumExpense(txs))}\n📈 Total Masuk: ${formatIDR(sumIncome(txs))}\n📋 Jumlah Transaksi: ${txs.length}${HELP_FOOTER}` } };
+    }
+
+    // === !balance / !pockets ===
+    if (lowerText === "!balance" || lowerText === "!pockets") {
+      // 1. Ambil semua kantong milik user
+      const pockets = await prisma.budgetPocket.findMany({
+        where: { userId: cmdUser.id },
+        include: { category: true },
+      });
+      if (!pockets.length) return { success: true, replyText: true, data: { message: `💼 Belum ada kantong yang dibuat. Atur kantong di web Kainest dulu ya!${HELP_FOOTER}` } };
+
+      // 2. Ambil gaji bulan ini dari MonthlyFinancialHistory untuk hitung limit (jika pakai persentase)
+      const monthlyHistory = await prisma.monthlyFinancialHistory.findFirst({
+        where: { userId: cmdUser.id, period: monthStart },
+      });
+      const salary = monthlyHistory?.salarySnapshot || 0;
+
+      // 3. Ambil total pengeluaran per kategori bulan ini
+      const expenses = await prisma.transaction.groupBy({
+        by: ['categoryId'],
+        where: { userId: cmdUser.id, type: "EXPENSE", date: { gte: monthStart } },
+        _sum: { amount: true },
+      });
+      const expenseMap = Object.fromEntries(expenses.map(e => [e.categoryId, e._sum.amount || 0]));
+
+      // 4. Format laporan
+      const lines = pockets.map(p => {
+        let limit = 0;
+        if (p.limitAmount && p.limitAmount > 0) limit = p.limitAmount;
+        else if (p.percentage && p.percentage > 0) limit = Math.floor((p.percentage / 100) * salary);
+        
+        const spent = expenseMap[p.categoryId] || 0;
+        const sisa = limit - spent;
+        return `${p.category?.icon || "📌"} *${p.category?.name || "-"}*: Sisa ${formatIDR(sisa > 0 ? sisa : 0)} dari ${formatIDR(limit)}`;
+      }).join("\n");
+      
+      return { success: true, replyText: true, data: { message: `💼 *Saldo Kantong Bulan Ini*\n\n${lines}${HELP_FOOTER}` } };
+    }
+
+    // === !top ===
+    if (lowerText === "!top") {
+      const txs = await prisma.transaction.findMany({
+        where: { userId: cmdUser.id, type: "EXPENSE", date: { gte: monthStart } },
+        include: { category: true },
+        orderBy: { amount: "desc" },
+        take: 3,
+      });
+      if (!txs.length) return { success: true, replyText: true, data: { message: `🏆 Belum ada pengeluaran bulan ini.${HELP_FOOTER}` } };
+      const lines = txs.map((t, i) => `${i + 1}. ${t.category?.icon || "📌"} ${t.category?.name || "-"}: ${formatIDR(t.amount)} — ${t.note || "-"}`).join("\n");
+      return { success: true, replyText: true, data: { message: `🏆 *Top 3 Pengeluaran Terbesar Bulan Ini*\n\n${lines}${HELP_FOOTER}` } };
+    }
+
+    // === !recent ===
+    if (lowerText === "!recent") {
+      const txs = await prisma.transaction.findMany({
+        where: { userId: cmdUser.id },
+        include: { category: true },
+        orderBy: { date: "desc" },
+        take: 5,
+      });
+      if (!txs.length) return { success: true, replyText: true, data: { message: `📜 Belum ada transaksi yang tercatat.${HELP_FOOTER}` } };
+      const lines = txs.map(t => `${t.category?.icon || "📌"} ${t.category?.name || "-"}: ${t.type === "INCOME" ? "+" : "-"}${formatIDR(t.amount)} — ${t.note || "-"}`).join("\n");
+      return { success: true, replyText: true, data: { message: `📜 *5 Transaksi Terakhir*\n\n${lines}${HELP_FOOTER}` } };
+    }
+
+    // === !undo ===
+    if (lowerText === "!undo") {
+      // Tampilkan transaksi terakhir dan minta konfirmasi
+      const lastTx = await prisma.transaction.findFirst({
+        where: { userId: cmdUser.id },
+        include: { category: true },
+        orderBy: { date: "desc" },
+      });
+      if (!lastTx) return { success: true, replyText: true, data: { message: `❌ Tidak ada transaksi yang bisa dibatalkan.${HELP_FOOTER}` } };
+      const formattedAmt = formatIDR(lastTx.amount);
+      return {
+        success: true, replyText: true,
+        data: { message: `⚠️ *Konfirmasi Hapus Transaksi Terakhir*\n\n${lastTx.category?.icon || "📌"} ${lastTx.category?.name || "-"}: ${formattedAmt}\n🧾 ${lastTx.note || "-"}\n\nKetik *!undo Y* untuk menghapus transaksi ini.${HELP_FOOTER}` }
+      };
+    }
+
+    // === !undo Y (konfirmasi) ===
+    if (lowerText === "!undo y") {
+      const lastTx = await prisma.transaction.findFirst({
+        where: { userId: cmdUser.id },
+        orderBy: { date: "desc" },
+      });
+      if (!lastTx) return { success: true, replyText: true, data: { message: `❌ Tidak ada transaksi yang bisa dihapus.${HELP_FOOTER}` } };
+      await prisma.transaction.delete({ where: { id: lastTx.id } });
+      return { success: true, replyText: true, data: { message: `✅ Transaksi berhasil dihapus!\n🧾 ${lastTx.note || "-"} (${formatIDR(lastTx.amount)})${HELP_FOOTER}` } };
+    }
+
+    // === !help ===
+    if (lowerText === "!help") {
+      return {
+        success: true, replyText: true,
+        data: {
+          message: `🤖 *Kainest Bot — Daftar Perintah*\n\n` +
+            `📋 *Laporan*\n` +
+            `!today   — Rekap pengeluaran hari ini\n` +
+            `!weekly  — Rekap 7 hari terakhir\n` +
+            `!monthly — Rekap bulan berjalan\n` +
+            `!balance — Sisa saldo tiap kantong\n` +
+            `!top     — Top 3 pengeluaran terbesar bulan ini\n` +
+            `!recent  — 5 transaksi terakhir\n\n` +
+            `⚙️ *Aksi*\n` +
+            `!undo    — Lihat & konfirmasi hapus transaksi terakhir\n` +
+            `!undo Y  — Hapus transaksi terakhir (setelah konfirmasi)\n` +
+            `!link KODE — Hubungkan akun & aktifkan grup\n\n` +
+            `💬 *Mencatat Transaksi*\n` +
+            `Cukup ketik transaksimu secara natural, contoh:\n` +
+            `_Makan siang 25k_ atau _Gajian 3.5jt_`
+        }
+      };
+    }
+
+    // Perintah tidak dikenal
+    return {
+      success: true, replyText: true,
+      data: { message: `❓ Perintah tidak dikenali. Ketik *!help* untuk melihat daftar perintah yang tersedia.` }
+    };
+  }
+
   const isGreeting = ["hai", "halo", "hallo", "hello", "p", "ping"].includes(lowerText.trim());
   const isAck = ["ok", "oke", "sip", "siap", "mantap", "makasih", "terima kasih", "thanks", "y", "ya", "iya", "yaps"].includes(lowerText.trim());
 
@@ -126,17 +304,18 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   if (data.groupId) {
     const activeGroup = await botTransactionRepository.getActiveGroup(data.groupId);
     if (!activeGroup) {
-      // Balas peringatan grup belum aktif
+      // Balas peringatan grup belum aktif — arahkan ke !link
       return {
-        success: true, // ubah menjadi true agar text dikirim
+        success: true,
         reaction: "⚠️",
         replyText: true,
         data: {
-          message: `👋 Halo, ${user.name || "Kak"}! Sebelum mulai mencatat, aktifkan dulu bot di grup ini ya!\n\nKetik:\n  \`!aktifkan-kainest\``,
+          message: `👋 Halo, ${user.name || "Kak"}! Grup ini belum terdaftar untuk Kainest.\n\nUntuk mengaktifkannya, kirim perintah berikut di grup ini:\n  \`!link KODE_TAUTANMU\`\n\n_(Temukan kodemu di web Kainest → Profil → Pasangan)_\n\n💡 Ketik !help untuk bantuan.`,
         }
       };
     }
   }
+
 
   // 8. Jika sapaan dan grup sudah aktif → balas sambutan singkat
   if (isGreeting) {
@@ -232,7 +411,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   const randomHeader = headerTexts[Math.floor(Math.random() * headerTexts.length)];
   const randomFooter = footerTexts[Math.floor(Math.random() * footerTexts.length)];
 
-  const replyText = `📒 Siap Noted!!🤖\n\n${randomHeader}\n\n⏰ Waktu: ${formattedTime}\n🔖 Tipe: ${txType}\n💰 Jumlah: ${formattedAmount}\n🧾 Deskripsi: ${description}\n${icon} Pocket: ${pocket}\n\n${randomFooter}`;
+  const replyText = `📒 Siap Noted!!🤖\n\n${randomHeader}\n\n⏰ Waktu: ${formattedTime}\n🔖 Tipe: ${txType}\n💰 Jumlah: ${formattedAmount}\n🧾 Deskripsi: ${description}\n${icon} Pocket: ${pocket}\n\n${randomFooter}\n\n💡 Ketik *!help* untuk bantuan.`;
 
   return {
     success: true,
