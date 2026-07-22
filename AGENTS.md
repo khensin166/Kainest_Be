@@ -202,3 +202,13 @@ docker compose up -d
   - Penambahan Controller baru (BlastController.ts) untuk melayani *bulk message* dengan jeda 1.5 detik per pesan ke GOWA.
   - Penambahan Controller baru (DeviceProxyController.ts) yang bertugas mem- *proxy* HTTP *requests* (GET/POST/DELETE) dari Web Admin menuju GOWA API, guna melewati limitasi **CORS browser** serta mengamankan Basic Auth credential. (Note: Koneksi Websocket wss:// dari frontend tetap terhubung langsung ke GOWA karena WS tidak diblokir CORS browser).
   - Skema PostgreSQL public."BotActiveGroup" (View) telah di- *drop* dan dibuat ulang untuk mengekspos kolom userId.
+
+## Update 22 Juli 2026 (Part 3: Eksplorasi OmniRoute AI)
+- **Status Eksperimen**: Berhasil namun implementasi ditunda. OmniRoute (Router Cerdas) terbukti jauh lebih superior daripada langsung menembak API Groq, dengan hasil perbandingan:
+  - **Latency Internal**: OmniRoute (7ms - 15ms berkat Semantic Cache) vs Groq (~70ms+ tanpa cache).
+  - **Resiliensi**: OmniRoute menggunakan parameter `"model": "auto"` sehingga kebal terhadap kasus Groq `model_decommissioned`. Model otomatis fallback/load-balance (misal dari *big-pickle* ke *deepseek-v4-flash-free*).
+- **Rencana Implementasi Mendatang**:
+  1. Ubah URL endpoint LLM di `Kainest_Be/src/infrastructure/ai/groqService.ts` atau `.env` dari `api.groq.com/openai/v1` menjadi `https://kaizent-router.kenantomfie.com/v1/chat/completions`.
+  2. Ubah kredensial *Bearer Token* di `.env` backend dari Groq Key menjadi Token OmniRoute (`sk-7c24274b5ef686dc-843f72-3887ff4a` atau buat kunci production baru).
+  3. Ubah nama model di `groqService.js` (yang dikirim dalam JSON body) dari `llama-3.3-70b-versatile` menjadi `"auto"`.
+  4. Perhatikan bahwa `x-omniroute-*` response header dapat dimanfaatkan (jika perlu log latensi cache). Karena menggunakan format OpenAI (termasuk dukungan `response_format: json_object`), tidak perlu merombak fungsi parsing AI.
