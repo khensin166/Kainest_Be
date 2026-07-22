@@ -196,27 +196,70 @@ export const gowaWebhookController = async (c: Context) => {
             // GOWA mewajibkan parameter ?phone= berisi JID pengirim/grup agar tahu sesi mana yang dipakai
             const targetPhone = groupId || `${senderPhone}@s.whatsapp.net`;
             const downloadUrl = `${GOWA_BASE_URL}/message/${messageId}/download?phone=${encodeURIComponent(targetPhone)}`;
+            
+            logger.debug("Attempting to download audio from GOWA", { downloadUrl, messageId });
+            
             const resp = await fetch(downloadUrl, {
               headers: {
                 "X-Device-Id": GOWA_DEVICE_ID,
                 ...(GOWA_API_KEY ? { Authorization: `Basic ${GOWA_API_KEY}` } : {}),
               }
             });
+
             if (resp.ok) {
               const resJson = await resp.json();
+              logger.debug("GOWA download API response", { data: resJson.data });
+
               if (resJson.data && resJson.data.url) {
-                // Fetch dari URL public yang diberikan GOWA
-                const fileResp = await fetch(resJson.data.url);
+                // FIX #1: Rewrite URL agar selalu menggunakan domain internal Docker (GOWA_BASE_URL),
+                // bukan localhost/127.0.0.1 yang bisa membuat Backend salah menembak dirinya sendiri.
+                let fileUrl: string = resJson.data.url;
+                try {
+                  const parsed = new URL(fileUrl);
+                  const gowaBase = new URL(GOWA_BASE_URL);
+                  parsed.hostname = gowaBase.hostname;
+                  parsed.port = gowaBase.port;
+                  parsed.protocol = gowaBase.protocol;
+                  fileUrl = parsed.toString();
+                } catch {
+                  // Jika parsing URL gagal (misal GOWA mengembalikan path relatif), gabungkan manual
+                  if (!fileUrl.startsWith("http")) {
+                    fileUrl = `${GOWA_BASE_URL}${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
+                  }
+                }
+
+                logger.debug("Fetching audio file from rewritten URL", { fileUrl });
+
+                // FIX #2: Tambahkan Basic Auth saat mengambil file statis dari GOWA
+                // agar tidak tertolak oleh lapisan autentikasi GOWA.
+                const fileResp = await fetch(fileUrl, {
+                  headers: {
+                    "X-Device-Id": GOWA_DEVICE_ID,
+                    ...(GOWA_API_KEY ? { Authorization: `Basic ${GOWA_API_KEY}` } : {}),
+                  }
+                });
+
                 if (fileResp.ok) {
                   const arrayBuffer = await fileResp.arrayBuffer();
                   audioBuffer = Buffer.from(arrayBuffer);
+                  logger.debug("Audio buffer fetched successfully", { bytes: audioBuffer.byteLength });
+                } else {
+                  const errText = await fileResp.text();
+                  logger.warn("Failed to fetch audio file from GOWA static URL", {
+                    fileUrl,
+                    status: fileResp.status,
+                    error: errText,
+                  });
                 }
+              } else {
+                logger.warn("GOWA download response has no data.url", { resJson });
               }
             } else {
-              logger.warn("Failed to download media from GOWA", { status: resp.status, text: await resp.text() });
+              const errText = await resp.text();
+              logger.warn("Failed to call GOWA download API", { status: resp.status, error: errText });
             }
           } catch (e: any) {
-            logger.error("Error downloading audio", { error: e.message });
+            logger.error("Error downloading audio from GOWA", { error: e.message, stack: e.stack?.split("\n")[0] });
           }
         }
 
