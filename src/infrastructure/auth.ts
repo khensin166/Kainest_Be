@@ -71,8 +71,8 @@ export const auth = betterAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
     },
     github: {
-      clientId: process.env.GITHUB_CLIENT_ID as string,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
+      clientId: process.env.G1THUB_CLIENT_ID as string,
+      clientSecret: process.env.G1THUB_CLIENT_SECRET as string,
     },
   },
   plugins: [admin(), bearer()],
