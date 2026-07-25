@@ -48,7 +48,7 @@ export const auth = betterAuth({
         enabled: true,
         async sendResetPassword({ user, url, token }, request) {
             try {
-                const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+                const fromEmail = process.env.RESEND_FROM_EMAIL || "Kainest <noreply@kenantomfie.com>";
                 const htmlBody = getResetPasswordEmailHtml(user.name || 'Pengguna Kainest', url);
                 const data = await resend.emails.send({
                     from: fromEmail,
