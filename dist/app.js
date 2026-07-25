@@ -23,7 +23,14 @@ app.use('*', secureHeaders());
 // Hanya izinkan request dari frontend Vue Anda (default Vite)
 // Gunakan CORS dengan credentials untuk session cookie
 app.use('*', cors({
-    origin: ['https://kainest.kenantomfie.site', 'http://localhost:5173', 'https://staging.kainest.kenantomfie.site', 'https://gowa.kenantomfie.com',],
+    origin: [
+        'https://kainest.kenantomfie.site',
+        'https://kainest.kenantomfie.com',
+        'http://localhost:5173',
+        'https://staging.kainest.kenantomfie.site',
+        'https://staging.kainest.kenantomfie.com',
+        'https://gowa.kenantomfie.com',
+    ],
     credentials: true,
 }));
 // 🔵 Global Logging Middleware — Semua request masuk akan tercatat
@@ -41,7 +48,7 @@ app.use('*', loggingMiddleware);
  * HARUS didaftarkan SEBELUM app.on("/auth/*") agar tidak di-override oleh Better Auth handler.
  */
 app.get('/auth/social-callback', async (c) => {
-    const FRONTEND_URL = process.env.FRONTEND_URL || 'https://staging.kainest.kenantomfie.site';
+    const FRONTEND_URL = process.env.FRONTEND_URL || 'https://staging.kainest.kenantomfie.com';
     try {
         // Baca session dari cookie — browser request ini langsung ke backend (same-domain),
         // jadi cookie PASTI valid dan bisa dibaca oleh Better Auth.

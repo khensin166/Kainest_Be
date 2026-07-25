@@ -10,15 +10,15 @@ Untuk menjaga keamanan data dan stabilitas aplikasi, sistem Kainest dibagi menja
 
 ### 1. Production (Live)
 Lingkungan yang digunakan oleh *user* publik.
-*   **Frontend Web:** `https://kainest.kenantomfie.site` (Vercel)
-*   **Backend Hono:** `https://kainest-be.kenantomfie.site` (VPS / Nginx)
+*   **Frontend Web:** `https://kainest.kenantomfie.com` (Vercel)
+*   **Backend Hono:** `https://kainest-be.v.kenantomfie.com` (VPS / Nginx)
 *   **GOWA Bot:** `https://gowa.kenantomfie.com` (VPS / Nginx, tersambung ke nomor WA Official)
 *   **Database:** Supabase PostgreSQL (Production Schema)
 
 ### 2. Staging (Testing / Development)
 Lingkungan khusus administrator & developer untuk bereksperimen.
-*   **Frontend Web:** `https://staging.kainest.kenantomfie.site` (Vercel)
-*   **Backend Hono:** `https://staging.kainest-be.kenantomfie.site` (VPS / Nginx)
+*   **Frontend Web:** `https://staging.kainest.kenantomfie.com` (Vercel)
+*   **Backend Hono:** `https://staging.kainest-be.v.kenantomfie.com` (VPS / Nginx)
 *   **GOWA Bot Staging:** Berjalan pada port/nomor berbeda dengan *Safe Mode* aktif (Hanya merespons daftar nomor WA Admin).
 *   **Database:** Supabase PostgreSQL (Staging Schema / Data Mockup)
 

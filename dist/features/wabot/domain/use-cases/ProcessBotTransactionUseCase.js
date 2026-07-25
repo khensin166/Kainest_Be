@@ -3,48 +3,43 @@ import { classifyTransactionUseCase } from "../../../budgeting/domain/use-cases/
 import { createTransactionUseCase } from "../../../budgeting/domain/use-cases/CreateTransactionUseCase.js";
 import { prisma } from "../../../../infrastructure/database/prisma.js";
 import { transcribeAudio } from "../../../../infrastructure/api/cloudflareWhisperApi.js";
-// Pesan onboarding untuk user baru yang mengirim pesan pertama kali di personal
+import { logger } from "../../../../infrastructure/logger/logger.js";
+// Pesan onboarding untuk user baru yang mengirim pesan pertama kali
+const HELP_FOOTER_CONST = "\n\n💡 Ketik *!help* untuk bantuan.";
 const ONBOARDING_MESSAGE = `Kamu siapanyakkkk? 👀
 
-Kenalan dulu yuk! Kamu harus register dan daftarkan grup dan no wa supaya bisa mencatat bersama kami 🥳
+Kenalan dulu yuk! Kamu harus punya akun Kainest dan menautkan nomor WA kamu supaya bisa mencatat bersama kami 🥳
 
 Ikuti langkah ini ya:
 
-1️⃣ Buka web *kainest.kenantomfie.site*
-2️⃣ Pilih menu *Profile / Settings* di pojok kanan atas.
-3️⃣ Pilih tab *Pasangan*, lalu ambil & salin *Kode Undangan* kamu.
-4️⃣ Balas pesan ini dengan format:
-   \`!link KODE_UNIK_KAMU\`
+1️⃣ *Daftar akun* di web *kainest.kenantomfie.com* (klik Register jika belum punya akun)
+2️⃣ Lengkapi data profil kamu (Nama & Nomor HP)
+3️⃣ Masuk ke menu *Profile → Pasangan*, lalu salin *Kode Tautan* kamu (formatnya: !link KODE)
+4️⃣ Buat *Grup WhatsApp baru* dan masukkan aku (bot) ke dalamnya
+5️⃣ Kirim Kode Tautan tersebut *langsung di dalam Grup* yang baru dibuat
 
-5️⃣ Setelah sukses tertaut, buat grup baru dan masukkan aku (bot) ke dalamnya.
-   🤖 *Android*: Di chat ini, ketuk ikon titik tiga (⋮) ➡️ pilih *New Group*.
-   🍎 *iPhone*: Ketuk nama profil di atas ➡️ pilih *Create Group with...*
-
-6️⃣ Di grup tersebut, bot akan otomatis menyapa. Balas dengan ketik:
-   \`!aktifkan-kainest\`
-
-7️⃣ Selesai! Kamu bisa langsung catat pengeluaran 🎉
-   Contoh: \`Makan siang 20k\` atau \`Bensin 50rb\``;
+Selesai! Akun kamu langsung terhubung dan Grup langsung aktif untuk mencatat pengeluaran 🎉
+Contoh mencatat: \`Makan siang 20k\` atau \`Bensin 50rb\`${HELP_FOOTER_CONST}`;
 export const processBotTransactionUseCase = async (data) => {
     // 1. Validasi tipe pesan dan transkripsi Audio (Voice Note)
     let textMsg = data.text?.trim() || "";
     if (data.type === "audio" || data.type === "voice" || data.type === "ptt") {
         if (!data.audioBuffer) {
-            return { success: false, status: 400, message: "Audio buffer kosong", reaction: "❓" };
+            return { success: false, status: 400, message: `Audio buffer kosong${HELP_FOOTER_CONST}`, reaction: "❓", replyText: true };
         }
         try {
             textMsg = await transcribeAudio(data.audioBuffer);
         }
         catch (error) {
-            return { success: false, status: 500, message: error.message, reaction: "⚠️", replyText: true };
+            return { success: false, status: 500, message: `${error.message}${HELP_FOOTER_CONST}`, reaction: "⚠️", replyText: true };
         }
     }
     else if (data.type !== "text" && data.type !== "extendedTextMessage") {
-        return { success: false, status: 400, message: "Hanya pesan teks dan pesan suara (VN) yang didukung", reaction: "❓" };
+        return { success: false, status: 400, message: `Hanya pesan teks dan pesan suara (VN) yang didukung${HELP_FOOTER_CONST}`, reaction: "❓", replyText: true };
     }
     // Jika teks hasil transkripsi (atau teks asli) kosong
     if (!textMsg) {
-        return { success: false, status: 400, message: "Pesan kosong tidak dapat diproses", reaction: "❓" };
+        return { success: false, status: 400, message: `Pesan kosong tidak dapat diproses${HELP_FOOTER_CONST}`, reaction: "❓", replyText: true };
     }
     const lowerText = textMsg.toLowerCase();
     // 2. Pembersihan Sender
@@ -54,44 +49,222 @@ export const processBotTransactionUseCase = async (data) => {
     if (lowerText.startsWith("!link ")) {
         const code = textMsg.split(" ")[1];
         if (!code) {
-            return { success: false, status: 400, message: "Format salah. Gunakan: !link KODE_UNIK_KAMU" };
+            return { success: false, status: 400, message: `Format salah. Gunakan: !link KODE_UNIK_KAMU${HELP_FOOTER_CONST}`, replyText: true };
         }
         const userToLink = await botTransactionRepository.getUserByInvitationCode(code);
         if (!userToLink) {
-            return { success: false, status: 404, message: "❌ Kode tidak valid atau akun tidak ditemukan. Coba salin ulang kode dari web Kainest ya!" };
+            return { success: false, status: 404, message: `❌ Kode tidak valid atau akun tidak ditemukan. Coba salin ulang kode dari web Kainest ya!${HELP_FOOTER_CONST}`, replyText: true };
         }
+        // Simpan JID pengirim ke database (optional, bisa kosong jika belum ada)
         const jidToSave = rawSender.replace("@s.whatsapp.net", "").replace("@c.us", "").replace("@lid", "");
         await botTransactionRepository.updateWhatsappJid(userToLink.id, jidToSave);
+        // Jika dikirim dari GRUP: langsung aktifkan grup sekaligus
+        if (data.groupId) {
+            await prisma.botActiveGroup.upsert({
+                where: { groupId: data.groupId },
+                create: { groupId: data.groupId, userId: userToLink.id },
+                update: { userId: userToLink.id }, // Update userId jika grup sudah ada (relink)
+            });
+            return {
+                success: true,
+                data: {
+                    message: `✅ Yeay! Akun Kainest *${userToLink.name || userToLink.email}* berhasil terhubung & Grup ini langsung AKTIF! 🎊\n\nKamu sudah bisa langsung mencatat di sini.\nContoh: *Makan siang 20k* atau *Bensin 50rb* 🎉${HELP_FOOTER_CONST}`,
+                    sendKicawSticker: true,
+                },
+            };
+        }
+        // Jika dikirim via PRIVATE CHAT: akun tertaut tapi grup belum
         return {
             success: true,
             data: {
-                message: `✅ Yeay! Akun Kainest *${userToLink.name || userToLink.email}* kini berhasil terhubung! 🎉\n\nSelanjutnya:\n1. Buat grup baru dan masukkan aku ke sana.\n2. Bot akan langsung menyapa! Balas dengan ketik *!aktifkan-kainest* di grupnya.`,
+                message: `✅ Akun Kainest *${userToLink.name || userToLink.email}* berhasil terhubung! 🎉\n\nSatu langkah lagi:\n→ Buat *Grup WhatsApp baru*, masukkan aku ke sana, lalu kirim ulang pesan \`!link ${code}\` di dalam grup agar grup tersebut aktif untuk mencatat.${HELP_FOOTER_CONST}`,
                 sendKicawSticker: true,
             },
         };
     }
-    // 4. Intercept Perintah !aktifkan-kainest (harus dari grup)
-    if (lowerText === "!aktifkan-kainest") {
-        if (!data.groupId) {
+    // 4. Intercept Perintah Bot (berawalan !) — Diproses SETELAH user lookup
+    //    Perintah ini memerlukan user valid. Cek user dahulu.
+    const isBotCommand = lowerText.startsWith("!") && !lowerText.startsWith("!link");
+    if (isBotCommand) {
+        const cmdUser = await botTransactionRepository.getUserByPhoneNumber(cleanSender);
+        if (!cmdUser) {
             return {
-                success: false,
-                status: 400,
-                message: "⚠️ Perintah ini hanya bisa dijalankan di dalam grup ya!",
+                success: true,
+                replyText: true,
+                data: { message: `${ONBOARDING_MESSAGE}` },
             };
         }
-        await prisma.botActiveGroup.upsert({
-            where: { groupId: data.groupId },
-            create: { groupId: data.groupId },
-            update: {},
-        });
+        const now = new Date();
+        const todayStart = new Date(now);
+        todayStart.setHours(0, 0, 0, 0);
+        const weekStart = new Date(now);
+        weekStart.setDate(now.getDate() - 6);
+        weekStart.setHours(0, 0, 0, 0);
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const HELP_FOOTER = "\n\n💡 Ketik *!help* untuk bantuan.";
+        const formatIDR = (n) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
+        const sumExpense = (rows) => rows.filter(t => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
+        const sumIncome = (rows) => rows.filter(t => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
+        // === !today ===
+        if (lowerText === "!today") {
+            const txs = await prisma.transaction.findMany({
+                where: { userId: cmdUser.id, date: { gte: todayStart } },
+                include: { category: true },
+                orderBy: { date: "desc" },
+            });
+            if (!txs.length)
+                return { success: true, replyText: true, data: { message: `📅 Hari ini belum ada transaksi yang tercatat.${HELP_FOOTER}` } };
+            const lines = txs.map(t => `${t.category?.icon || "📌"} ${t.category?.name || "-"}: ${t.type === "INCOME" ? "+" : "-"}${formatIDR(t.amount)} — ${t.note || "-"}`).join("\n");
+            return { success: true, replyText: true, data: { message: `📅 *Rekap Hari Ini*\n\n${lines}\n\n💰 Total Keluar: ${formatIDR(sumExpense(txs))}\n📈 Total Masuk: ${formatIDR(sumIncome(txs))}${HELP_FOOTER}` } };
+        }
+        // === !weekly ===
+        if (lowerText === "!weekly") {
+            const txs = await prisma.transaction.findMany({
+                where: { userId: cmdUser.id, date: { gte: weekStart } },
+                include: { category: true },
+                orderBy: { date: "desc" },
+            });
+            if (!txs.length)
+                return { success: true, replyText: true, data: { message: `📆 7 hari terakhir belum ada transaksi yang tercatat.${HELP_FOOTER}` } };
+            return { success: true, replyText: true, data: { message: `📆 *Rekap 7 Hari Terakhir*\n\n💰 Total Keluar: ${formatIDR(sumExpense(txs))}\n📈 Total Masuk: ${formatIDR(sumIncome(txs))}\n📋 Jumlah Transaksi: ${txs.length}${HELP_FOOTER}` } };
+        }
+        // === !monthly ===
+        if (lowerText === "!monthly") {
+            const txs = await prisma.transaction.findMany({
+                where: { userId: cmdUser.id, date: { gte: monthStart } },
+                include: { category: true },
+                orderBy: { date: "desc" },
+            });
+            if (!txs.length)
+                return { success: true, replyText: true, data: { message: `🗓️ Bulan ini belum ada transaksi yang tercatat.${HELP_FOOTER}` } };
+            return { success: true, replyText: true, data: { message: `🗓️ *Rekap Bulan Ini*\n\n💰 Total Keluar: ${formatIDR(sumExpense(txs))}\n📈 Total Masuk: ${formatIDR(sumIncome(txs))}\n📋 Jumlah Transaksi: ${txs.length}${HELP_FOOTER}` } };
+        }
+        // === !balance / !pockets ===
+        if (lowerText === "!balance" || lowerText === "!pockets") {
+            // 1. Ambil semua kantong milik user
+            const pockets = await prisma.budgetPocket.findMany({
+                where: { userId: cmdUser.id },
+                include: { category: true },
+            });
+            if (!pockets.length)
+                return { success: true, replyText: true, data: { message: `💼 Belum ada kantong yang dibuat. Atur kantong di web Kainest dulu ya!${HELP_FOOTER}` } };
+            // 2. Ambil gaji bulan ini dari MonthlyFinancialHistory untuk hitung limit (jika pakai persentase)
+            const monthlyHistory = await prisma.monthlyFinancialHistory.findFirst({
+                where: { userId: cmdUser.id, period: monthStart },
+            });
+            const salary = monthlyHistory?.salarySnapshot || 0;
+            // 3. Ambil total pengeluaran per kategori bulan ini
+            const expenses = await prisma.transaction.groupBy({
+                by: ['categoryId'],
+                where: { userId: cmdUser.id, type: "EXPENSE", date: { gte: monthStart } },
+                _sum: { amount: true },
+            });
+            const expenseMap = Object.fromEntries(expenses.map(e => [e.categoryId, e._sum.amount || 0]));
+            // 4. Format laporan
+            const lines = pockets.map(p => {
+                let limit = 0;
+                if (p.limitAmount && p.limitAmount > 0)
+                    limit = p.limitAmount;
+                else if (p.percentage && p.percentage > 0)
+                    limit = Math.floor((p.percentage / 100) * salary);
+                const spent = expenseMap[p.categoryId] || 0;
+                const sisa = limit - spent;
+                return `${p.category?.icon || "📌"} *${p.category?.name || "-"}*: Sisa ${formatIDR(sisa > 0 ? sisa : 0)} dari ${formatIDR(limit)}`;
+            }).join("\n");
+            return { success: true, replyText: true, data: { message: `💼 *Saldo Kantong Bulan Ini*\n\n${lines}${HELP_FOOTER}` } };
+        }
+        // === !top ===
+        if (lowerText === "!top") {
+            const txs = await prisma.transaction.findMany({
+                where: { userId: cmdUser.id, type: "EXPENSE", date: { gte: monthStart } },
+                include: { category: true },
+                orderBy: { amount: "desc" },
+                take: 3,
+            });
+            if (!txs.length)
+                return { success: true, replyText: true, data: { message: `🏆 Belum ada pengeluaran bulan ini.${HELP_FOOTER}` } };
+            const lines = txs.map((t, i) => `${i + 1}. ${t.category?.icon || "📌"} ${t.category?.name || "-"}: ${formatIDR(t.amount)} — ${t.note || "-"}`).join("\n");
+            return { success: true, replyText: true, data: { message: `🏆 *Top 3 Pengeluaran Terbesar Bulan Ini*\n\n${lines}${HELP_FOOTER}` } };
+        }
+        // === !recent ===
+        if (lowerText === "!recent") {
+            const txs = await prisma.transaction.findMany({
+                where: { userId: cmdUser.id },
+                include: { category: true },
+                orderBy: { date: "desc" },
+                take: 5,
+            });
+            if (!txs.length)
+                return { success: true, replyText: true, data: { message: `📜 Belum ada transaksi yang tercatat.${HELP_FOOTER}` } };
+            const lines = txs.map(t => `${t.category?.icon || "📌"} ${t.category?.name || "-"}: ${t.type === "INCOME" ? "+" : "-"}${formatIDR(t.amount)} — ${t.note || "-"}`).join("\n");
+            return { success: true, replyText: true, data: { message: `📜 *5 Transaksi Terakhir*\n\n${lines}${HELP_FOOTER}` } };
+        }
+        // === !undo ===
+        if (lowerText === "!undo") {
+            // Tampilkan transaksi terakhir dan minta konfirmasi
+            const lastTx = await prisma.transaction.findFirst({
+                where: { userId: cmdUser.id },
+                include: { category: true },
+                orderBy: { date: "desc" },
+            });
+            if (!lastTx)
+                return { success: true, replyText: true, data: { message: `❌ Tidak ada transaksi yang bisa dibatalkan.${HELP_FOOTER}` } };
+            const formattedAmt = formatIDR(lastTx.amount);
+            return {
+                success: true, replyText: true,
+                data: { message: `⚠️ *Konfirmasi Hapus Transaksi Terakhir*\n\n${lastTx.category?.icon || "📌"} ${lastTx.category?.name || "-"}: ${formattedAmt}\n🧾 ${lastTx.note || "-"}\n\nKetik *!undo Y* untuk menghapus transaksi ini.${HELP_FOOTER}` }
+            };
+        }
+        // === !undo Y (konfirmasi) ===
+        if (lowerText === "!undo y") {
+            const lastTx = await prisma.transaction.findFirst({
+                where: { userId: cmdUser.id },
+                orderBy: { date: "desc" },
+            });
+            if (!lastTx)
+                return { success: true, replyText: true, data: { message: `❌ Tidak ada transaksi yang bisa dihapus.${HELP_FOOTER}` } };
+            await prisma.transaction.delete({ where: { id: lastTx.id } });
+            return { success: true, replyText: true, data: { message: `✅ Transaksi berhasil dihapus!\n🧾 ${lastTx.note || "-"} (${formatIDR(lastTx.amount)})${HELP_FOOTER}` } };
+        }
+        // === !web / !app ===
+        if (lowerText === "!web" || lowerText === "!app") {
+            return {
+                success: true, replyText: true,
+                data: {
+                    message: `🌐 *Website Kainest*\n\nKamu bisa mengakses dashboard Kainest di tautan berikut:\n👉 https://kainest.kenantomfie.com${HELP_FOOTER}`
+                }
+            };
+        }
+        // === !help ===
+        if (lowerText === "!help") {
+            return {
+                success: true, replyText: true,
+                data: {
+                    message: `🤖 *Kainest Bot — Daftar Perintah*\n\n` +
+                        `📋 *Laporan*\n` +
+                        `!today   — Rekap pengeluaran hari ini\n` +
+                        `!weekly  — Rekap 7 hari terakhir\n` +
+                        `!monthly — Rekap bulan berjalan\n` +
+                        `!balance — Sisa saldo tiap kantong\n` +
+                        `!top     — Top 3 pengeluaran terbesar bulan ini\n` +
+                        `!recent  — 5 transaksi terakhir\n\n` +
+                        `⚙️ *Aksi*\n` +
+                        `!undo    — Lihat & konfirmasi hapus transaksi terakhir\n` +
+                        `!undo Y  — Hapus transaksi terakhir (setelah konfirmasi)\n` +
+                        `!link KODE — Hubungkan akun & aktifkan grup\n` +
+                        `!web     — Dapatkan tautan website Kainest\n\n` +
+                        `💬 *Mencatat Transaksi*\n` +
+                        `Cukup ketik transaksimu secara natural, contoh:\n` +
+                        `_Makan siang 25k_ atau _Gajian 3.5jt_`
+                }
+            };
+        }
+        // Perintah tidak dikenal
         return {
-            success: true,
-            data: {
-                message: "✅ Grup ini berhasil didaftarkan sebagai tempat bertransaksi Kainest! 🎊\n\nSekarang kamu bisa langsung catat pengeluaran di sini.\nContoh: *Makan siang 20k* atau *Bensin 50rb*",
-            },
+            success: true, replyText: true,
+            data: { message: `❓ Perintah tidak dikenali. Ketik *!help* untuk melihat daftar perintah yang tersedia.` }
         };
     }
-    // 5. Deteksi pesan sapaan dasar & kata konfirmasi pendek
     const isGreeting = ["hai", "halo", "hallo", "hello", "p", "ping"].includes(lowerText.trim());
     const isAck = ["ok", "oke", "sip", "siap", "mantap", "makasih", "terima kasih", "thanks", "y", "ya", "iya", "yaps"].includes(lowerText.trim());
     // 6. Cek apakah pengirim sudah terdaftar di Kainest
@@ -113,15 +286,23 @@ export const processBotTransactionUseCase = async (data) => {
     if (data.groupId) {
         const activeGroup = await botTransactionRepository.getActiveGroup(data.groupId);
         if (!activeGroup) {
-            // Balas peringatan grup belum aktif
+            // Balas peringatan grup belum aktif — arahkan ke !link
             return {
-                success: true, // ubah menjadi true agar text dikirim
+                success: true,
                 reaction: "⚠️",
                 replyText: true,
                 data: {
-                    message: `👋 Halo, ${user.name || "Kak"}! Sebelum mulai mencatat, aktifkan dulu bot di grup ini ya!\n\nKetik:\n  \`!aktifkan-kainest\``,
+                    message: `👋 Halo, ${user.name || "Kak"}! Grup ini belum terdaftar untuk Kainest.\n\nUntuk mengaktifkannya, kirim perintah berikut di grup ini:\n  \`!link KODE_TAUTANMU\`\n\n_(Temukan kodemu di web Kainest → Profil → Pasangan)_\n\n💡 Ketik !help untuk bantuan.`,
                 }
             };
+        }
+        // ✨ AUTO-RELINK: Jika grup aktif tapi userId masih kosong, isi otomatis dari sender
+        if (activeGroup && !activeGroup.userId) {
+            logger.info(`[Auto-Relink] Grup ${data.groupId} belum punya userId, mencoba mengaitkan dengan user ${user.id} (${user.name || user.email})`);
+            await prisma.botActiveGroup.update({
+                where: { groupId: data.groupId },
+                data: { userId: user.id },
+            });
         }
     }
     // 8. Jika sapaan dan grup sudah aktif → balas sambutan singkat
@@ -131,7 +312,7 @@ export const processBotTransactionUseCase = async (data) => {
             reaction: "👀",
             replyText: true, // tetap balas teks
             data: {
-                message: `Halo, ${user.name || "Kak"}! 👋 Siap mencatat keuanganmu hari ini!\n\nLangsung ketik transaksimu ya, contoh:\n*Makan siang 20k* atau *Bensin 50rb* 😊`,
+                message: `Halo, ${user.name || "Kak"}! 👋 Siap mencatat keuanganmu hari ini!\n\nLangsung ketik transaksimu ya, contoh:\n*Makan siang 20k* atau *Bensin 50rb* 😊${HELP_FOOTER_CONST}`,
             },
         };
     }
@@ -143,12 +324,12 @@ export const processBotTransactionUseCase = async (data) => {
     // 10. Klasifikasi menggunakan AI
     const classification = await classifyTransactionUseCase(user.id, data.text);
     if (!classification.success || !classification.categoryId) {
-        return { success: false, status: 400, message: "Gagal mengklasifikasikan pengeluaran.", reaction: "❓" };
+        return { success: false, status: 400, message: `Gagal mengklasifikasikan pengeluaran.${HELP_FOOTER_CONST}`, reaction: "❓", replyText: true };
     }
     // 9. Catat Transaksi
     const amount = classification.amount || 0;
     if (amount <= 0) {
-        return { success: false, status: 400, message: "Nominal pengeluaran tidak terdeteksi atau 0.", reaction: "❓" };
+        return { success: false, status: 400, message: `Nominal pengeluaran tidak terdeteksi atau 0.${HELP_FOOTER_CONST}`, reaction: "❓", replyText: true };
     }
     const txDate = data.timestamp ? new Date(data.timestamp * 1000).toISOString() : new Date().toISOString();
     const createResult = await createTransactionUseCase({
@@ -160,7 +341,7 @@ export const processBotTransactionUseCase = async (data) => {
         type: classification.type, // ✅ Teruskan tipe INCOME/EXPENSE dari hasil klasifikasi AI
     });
     if (!createResult.success) {
-        return { success: false, status: 500, message: createResult.message };
+        return { success: false, status: 500, message: `${createResult.message}${HELP_FOOTER_CONST}`, replyText: true };
     }
     // 10. Kembalikan Response Sukses
     const transaction = createResult.data;
@@ -205,7 +386,7 @@ export const processBotTransactionUseCase = async (data) => {
     }
     const randomHeader = headerTexts[Math.floor(Math.random() * headerTexts.length)];
     const randomFooter = footerTexts[Math.floor(Math.random() * footerTexts.length)];
-    const replyText = `📒 Siap Noted!!🤖\n\n${randomHeader}\n\n⏰ Waktu: ${formattedTime}\n🔖 Tipe: ${txType}\n💰 Jumlah: ${formattedAmount}\n🧾 Deskripsi: ${description}\n${icon} Pocket: ${pocket}\n\n${randomFooter}`;
+    const replyText = `📒 Siap Noted!!🤖\n\n${randomHeader}\n\n⏰ Waktu: ${formattedTime}\n🔖 Tipe: ${txType}\n💰 Jumlah: ${formattedAmount}\n🧾 Deskripsi: ${description}\n${icon} Pocket: ${pocket}\n\n${randomFooter}\n\n💡 Ketik *!help* untuk bantuan.`;
     return {
         success: true,
         data: {

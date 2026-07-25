@@ -22,7 +22,7 @@ Kenalan dulu yuk! Kamu harus punya akun Kainest dan menautkan nomor WA kamu supa
 
 Ikuti langkah ini ya:
 
-1️⃣ *Daftar akun* di web *kainest.kenantomfie.site* (klik Register jika belum punya akun)
+1️⃣ *Daftar akun* di web *kainest.kenantomfie.com* (klik Register jika belum punya akun)
 2️⃣ Lengkapi data profil kamu (Nama & Nomor HP)
 3️⃣ Masuk ke menu *Profile → Pasangan*, lalu salin *Kode Tautan* kamu (formatnya: !link KODE)
 4️⃣ Buat *Grup WhatsApp baru* dan masukkan aku (bot) ke dalamnya
@@ -250,6 +250,16 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
       return { success: true, replyText: true, data: { message: `✅ Transaksi berhasil dihapus!\n🧾 ${lastTx.note || "-"} (${formatIDR(lastTx.amount)})${HELP_FOOTER}` } };
     }
 
+    // === !web / !app ===
+    if (lowerText === "!web" || lowerText === "!app") {
+      return {
+        success: true, replyText: true,
+        data: {
+          message: `🌐 *Website Kainest*\n\nKamu bisa mengakses dashboard Kainest di tautan berikut:\n👉 https://kainest.kenantomfie.com${HELP_FOOTER}`
+        }
+      };
+    }
+
     // === !help ===
     if (lowerText === "!help") {
       return {
@@ -266,7 +276,8 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
             `⚙️ *Aksi*\n` +
             `!undo    — Lihat & konfirmasi hapus transaksi terakhir\n` +
             `!undo Y  — Hapus transaksi terakhir (setelah konfirmasi)\n` +
-            `!link KODE — Hubungkan akun & aktifkan grup\n\n` +
+            `!link KODE — Hubungkan akun & aktifkan grup\n` +
+            `!web     — Dapatkan tautan website Kainest\n\n` +
             `💬 *Mencatat Transaksi*\n` +
             `Cukup ketik transaksimu secara natural, contoh:\n` +
             `_Makan siang 25k_ atau _Gajian 3.5jt_`
