@@ -139,8 +139,8 @@ Tambahkan/sesuaikan variabel berikut di dalam berkas `.env` global di VPS Anda:
 STAGING_ALLOWED_NUMBERS="62812345678,62887654321"
 
 # URL Backend Terpisah
-KAINEST_API_URL_PROD="https://kainest.be.kenantomfie.site"
-KAINEST_API_URL_STAGING="https://staging.kainest.be.kenantomfie.site"
+KAINEST_API_URL_PROD="https://kainest.be.kenantomfie.com"
+KAINEST_API_URL_STAGING="https://staging.kainest.be.kenantomfie.com"
 ```
 
 #### 2. Perbarui Berkas `docker-compose.yml` di VPS Anda

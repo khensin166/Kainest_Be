@@ -12,7 +12,11 @@ export const auth = betterAuth({
         "http://localhost:5173",
         "https://staging.kainest.kenantomfie.site",
         "https://kainest.kenantomfie.site",
-        "https://staging.kainest.be.kenantomfie.site"
+        "https://staging.kainest.be.kenantomfie.site",
+        "https://staging.kainest.kenantomfie.com",
+        "https://kainest.kenantomfie.com",
+        "https://staging.kainest.be.kenantomfie.com",
+        "https://kainest.be.kenantomfie.com"
     ],
     database: prismaAdapter(prisma, {
         provider: "postgresql",
@@ -71,7 +75,7 @@ export const auth = betterAuth({
     advanced: {
         crossSubDomainCookies: {
             enabled: !isLocal,
-            domain: isLocal ? undefined : "kenantomfie.site",
+            domain: isLocal ? undefined : "kenantomfie.com",
         },
         defaultCookieAttributes: {
             sameSite: isLocal ? "lax" : "none",
