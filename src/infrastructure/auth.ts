@@ -18,7 +18,9 @@ export const auth = betterAuth({
     "https://staging.kainest.kenantomfie.com", 
     "https://kainest.kenantomfie.com",
     "https://staging.kainest.be.kenantomfie.com",
-    "https://kainest.be.kenantomfie.com"
+    "https://kainest.be.kenantomfie.com",
+    "https://staging.kainest-be.v.kenantomfie.com",
+    "https://kainest-be.v.kenantomfie.com"
   ],
   database: prismaAdapter(prisma, {
     provider: "postgresql",
