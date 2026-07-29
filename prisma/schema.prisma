@@ -70,7 +70,7 @@ model User {
 
   // --- NEW: BUDGETING FIELDS ---
   salary Int @default(0) // Gaji bulanan
-  payday Int @default(1) // Tanggal gajian (1-31)
+  payday Int @default(31) // Tanggal gajian / reset siklus (1-31, nilai 31 = Akhir Bulan)
 
   // Relasi ke fitur Budgeting
   budgetCategories BudgetCategory[] // Kategori custom user

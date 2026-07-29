@@ -5,14 +5,15 @@ type SetupData = {
   userId: string;
   salary: number;
   rentAmount: number; // Biaya Kos/Cicilan tetap
+  payday?: number;   // Tanggal gajian / reset siklus (1-31, default 31 = Akhir Bulan)
 };
 
 export const setupMonthlyBudgetUseCase = async (data: SetupData) => {
   try {
-    const { userId, salary } = data;
+    const { userId, salary, payday } = data;
 
-    // 1. Simpan salary ke User
-    await budgetRepository.updateUserSalary(userId, salary);
+    // 1. Simpan salary & payday ke User
+    await budgetRepository.updateUserSalary(userId, salary, payday);
 
     const now = new Date();
     const period = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));

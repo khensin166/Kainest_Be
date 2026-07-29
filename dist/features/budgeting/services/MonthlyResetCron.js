@@ -1,0 +1,211 @@
+// src/features/budgeting/services/MonthlyResetCron.ts
+// Layanan cron job untuk reset siklus keuangan bulanan & blast pesan ringkasan.
+//
+// Logika inti:
+// - Berjalan setiap hari pukul 00:10 (tengah malam lewat 10 menit, Asia/Jakarta)
+// - Mendeteksi user yang payday-nya jatuh pada hari ini
+// - Menghitung ringkasan keuangan siklus yang baru saja berakhir
+// - Meminta Groq AI untuk menyusun analisis & saran singkat
+// - Blast pesan ringkasan tersebut ke grup WA aktif user via GOWA
+//
+// ⚠️  GUARD: Hanya aktif jika ENABLE_SCHEDULER=true (HANYA set di .env VPS Production)
+//     Ini mencegah double-blast dari node Vercel yang juga menjalankan backend.
+import * as schedule from "node-schedule";
+import { prisma } from "../../../infrastructure/database/prisma.js";
+import { groqService } from "../../../infrastructure/ai/groqService.js";
+import { logger } from "../../../infrastructure/logger/logger.js";
+// ── Env config ───────────────────────────────────────────────────────────────
+const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
+const GOWA_API_KEY = process.env.WA_BOT_API_KEY || process.env.GOWA_API_KEY || "";
+const GOWA_DEVICE_ID = process.env.WA_BOT_DEVICE_ID || process.env.GOWA_DEVICE_ID || "";
+const ENABLE_SCHEDULER = process.env.ENABLE_SCHEDULER === "true";
+// ── Helper: Format mata uang Indonesia ───────────────────────────────────────
+const formatIDR = (n) => new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+}).format(n);
+// ── Helper: Format nama bulan Indonesia ───────────────────────────────────────
+function formatMonthIndonesian(date) {
+    const months = [
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+    ];
+    return `${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+// ── Helper: Kirim pesan teks via GOWA ────────────────────────────────────────
+async function sendTextViaGowa(phone, message) {
+    const url = `${GOWA_BASE_URL}/send/message`;
+    try {
+        const resp = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Device-Id": GOWA_DEVICE_ID,
+                ...(GOWA_API_KEY ? { Authorization: `Basic ${GOWA_API_KEY}` } : {}),
+            },
+            body: JSON.stringify({ phone, message }),
+        });
+        if (!resp.ok) {
+            const text = await resp.text();
+            throw new Error(`GOWA send failed [${resp.status}]: ${text}`);
+        }
+        logger.info("[MonthlyReset] Blast pesan terkirim", { phone });
+    }
+    catch (err) {
+        logger.error("[MonthlyReset] Gagal kirim blast via GOWA", { phone, error: err.message });
+    }
+}
+// ── Helper: Dapatkan hari terakhir di bulan tertentu ─────────────────────────
+function getLastDayOfMonth(year, month) {
+    // month di sini adalah 0-indexed (Jan=0, Feb=1, dst.)
+    return new Date(year, month + 1, 0).getDate();
+}
+// ── Core: Deteksi apakah hari ini adalah hari reset untuk user tertentu ───────
+function isTodayResetDay(payday) {
+    const now = new Date();
+    const today = now.getDate();
+    const lastDay = getLastDayOfMonth(now.getFullYear(), now.getMonth());
+    // Kasus normal: payday tepat hari ini
+    if (payday === today)
+        return true;
+    // Kasus capping: payday > hari terakhir bulan ini, dan hari ini adalah hari terakhir
+    // Contoh: payday=31 di bulan April (30 hari) → reset di tanggal 30
+    if (payday > lastDay && today === lastDay)
+        return true;
+    return false;
+}
+// ── Core: Kalkulasi ringkasan keuangan siklus yang berakhir ─────────────────
+async function calculateCycleSummary(userId) {
+    const now = new Date();
+    // Siklus yang baru berakhir adalah bulan lalu (karena kita sudah di hari reset = hari pertama siklus baru)
+    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const history = await prisma.monthlyFinancialHistory.findFirst({
+        where: {
+            userId,
+            period: prevMonth,
+        },
+    });
+    const salary = history?.salarySnapshot || 0;
+    const totalExpense = history?.totalSpent || 0;
+    const totalIncome = (history?.totalIncome || 0) + salary;
+    const surplus = totalIncome - totalExpense;
+    const periodLabel = formatMonthIndonesian(prevMonth);
+    // Format ringkasan per kantong dari snapshot JSON
+    let pocketsDetail = "";
+    if (history?.pocketsSnapshot && Array.isArray(history.pocketsSnapshot)) {
+        pocketsDetail = history.pocketsSnapshot
+            .map((p) => {
+            const pct = p.limitAmount > 0 ? Math.round((p.spent / p.limitAmount) * 100) : 0;
+            const bar = pct >= 100 ? "🔴" : pct >= 75 ? "🟡" : "🟢";
+            return `${bar} ${p.icon || "💰"} ${p.categoryName}: ${formatIDR(p.spent)} / ${formatIDR(p.limitAmount)} (${pct}%)`;
+        })
+            .join("\n");
+    }
+    return { salary, totalExpense, totalIncome, surplus, pocketsDetail, periodLabel };
+}
+// ── Core: Generate AI insight untuk ringkasan ───────────────────────────────
+async function generateAiInsight(summary) {
+    const systemPrompt = `Kamu adalah Kenin, asisten keuangan pribadi yang bersahabat dan bijak. 
+Tugas kamu: Berikan ringkasan singkat (maksimal 3 kalimat) dan saran finansial yang actionable 
+berdasarkan data keuangan pengguna bulan lalu. 
+Gunakan bahasa Indonesia yang santai, hangat, dan menyemangati.
+JANGAN menyebut nama bulan dalam kalimat karena sudah ada di header pesan.`;
+    const userContext = JSON.stringify({
+        gaji: summary.salary,
+        total_pengeluaran: summary.totalExpense,
+        sisa_uang: summary.surplus,
+        rasio_pengeluaran: summary.salary > 0 ? `${Math.round((summary.totalExpense / summary.salary) * 100)}%` : "N/A",
+    });
+    try {
+        const insight = await groqService.generateResponse(systemPrompt, userContext);
+        return insight;
+    }
+    catch {
+        return "Pertahankan kebiasaan baikmu! Konsistensi adalah kunci menuju keuangan yang sehat. 💪";
+    }
+}
+// ── Core: Proses reset & blast untuk satu user ───────────────────────────────
+async function processUserReset(user) {
+    logger.info(`[MonthlyReset] Memproses reset untuk user: ${user.name || user.id}`);
+    const summary = await calculateCycleSummary(user.id);
+    const aiInsight = await generateAiInsight(summary);
+    // Susun pesan blast
+    const surplusLine = summary.surplus > 0
+        ? `💰 *Sisa Saldo:* ${formatIDR(summary.surplus)} ✨\n\n_(Ketik *!keep* jika mau sisa ini ditambahkan ke bulan depan)_`
+        : summary.surplus < 0
+            ? `⚠️ *Defisit:* ${formatIDR(Math.abs(summary.surplus))}\n_(Pengeluaran melebihi pemasukan. Yuk lebih hati-hati!)_`
+            : `⚖️ *Saldo pas-pasan.* Tidak lebih, tidak kurang.`;
+    const blastMessage = `📊 *LAPORAN AKHIR SIKLUS — ${summary.periodLabel.toUpperCase()}*
+untuk ${user.name || "Pengguna Kainest"} 👋
+━━━━━━━━━━━━━━━━━━━━
+💵 *Gaji/Pemasukan:* ${formatIDR(summary.totalIncome)}
+🛒 *Total Pengeluaran:* ${formatIDR(summary.totalExpense)}
+${surplusLine}
+
+📦 *Rincian Kantong:*
+${summary.pocketsDetail || "_(Tidak ada data kantong)_"}
+
+🤖 *Kata Kenin AI:*
+${aiInsight}
+━━━━━━━━━━━━━━━━━━━━
+💡 Ketik *!help* untuk bantuan.`;
+    // Kirim ke semua grup aktif user
+    if (!user.botActiveGroups.length) {
+        logger.warn(`[MonthlyReset] User ${user.id} tidak memiliki grup aktif, blast dilewati.`);
+        return;
+    }
+    for (const group of user.botActiveGroups) {
+        await sendTextViaGowa(group.groupId, blastMessage);
+        // Jeda antar grup agar tidak dianggap spam
+        await new Promise((r) => setTimeout(r, 2000));
+    }
+    logger.info(`[MonthlyReset] ✅ Blast selesai untuk ${user.name || user.id}`);
+}
+// ── Core: Jalankan reset untuk semua user yang payday-nya hari ini ────────────
+async function runMonthlyReset() {
+    logger.info("[MonthlyReset] 🌙 Memulai pengecekan siklus reset tengah malam...");
+    try {
+        // Ambil semua user beserta grup WA aktif mereka
+        const users = await prisma.user.findMany({
+            where: { salary: { gt: 0 } }, // Hanya user yang sudah setup gaji
+            include: {
+                waBotConfig: true,
+                botActiveGroups: { select: { groupId: true } },
+            },
+        });
+        let processedCount = 0;
+        for (const user of users) {
+            // Lewati user tanpa grup WA aktif
+            if (!user.botActiveGroups.length)
+                continue;
+            // Cek apakah hari ini adalah hari reset user ini
+            if (!isTodayResetDay(user.payday))
+                continue;
+            await processUserReset(user);
+            processedCount++;
+            // Jeda antar user untuk menghindari rate limit GOWA
+            await new Promise((r) => setTimeout(r, 3000));
+        }
+        logger.info(`[MonthlyReset] ✅ Selesai. ${processedCount} user diproses.`);
+    }
+    catch (err) {
+        logger.error("[MonthlyReset] ❌ Error saat menjalankan monthly reset", { error: err.message });
+    }
+}
+// ── Fungsi Utama: Daftarkan cron job ─────────────────────────────────────────
+export function startMonthlyResetScheduler() {
+    // Guard: Hanya aktif jika ENABLE_SCHEDULER=true (VPS Production saja)
+    // Ini mencegah double-blast dari node Vercel yang juga menjalankan backend.
+    if (!ENABLE_SCHEDULER) {
+        logger.info("[MonthlyReset] ENABLE_SCHEDULER tidak aktif. Monthly Reset Cron tidak dijalankan (non-production / Vercel).");
+        return;
+    }
+    logger.info("[MonthlyReset] ✅ Mendaftarkan Monthly Reset Cron Job (00:10 WIB setiap hari)...");
+    // Cron: Setiap hari pukul 00:10 WIB
+    schedule.scheduleJob({ hour: 0, minute: 10, tz: "Asia/Jakarta" }, () => {
+        logger.info("[MonthlyReset] ⏰ Cron triggered: Menjalankan monthly reset...");
+        runMonthlyReset();
+    });
+    logger.info("[MonthlyReset] → Cron job terdaftar: setiap hari pukul 00:10 WIB.");
+}

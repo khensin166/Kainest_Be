@@ -208,12 +208,16 @@ export const gowaWebhookController = async (c: Context) => {
 
             if (resp.ok) {
               const resJson = await resp.json();
-              logger.debug("GOWA download API response", { data: resJson.data });
+              // Support dua format respons GOWA:
+              // - Format lama: { data: { url: "..." } }
+              // - Format baru (v8.9+): { results: { file_url: "..." } }
+              const resultObj = resJson.data || resJson.results;
+              logger.debug("GOWA download API response", { resultObj });
 
-              if (resJson.data && resJson.data.url) {
+              if (resultObj && (resultObj.url || resultObj.file_url)) {
                 // FIX #1: Rewrite URL agar selalu menggunakan domain internal Docker (GOWA_BASE_URL),
                 // bukan localhost/127.0.0.1 yang bisa membuat Backend salah menembak dirinya sendiri.
-                let fileUrl: string = resJson.data.url;
+                let fileUrl: string = resultObj.url || resultObj.file_url;
                 try {
                   const parsed = new URL(fileUrl);
                   const gowaBase = new URL(GOWA_BASE_URL);
@@ -252,7 +256,7 @@ export const gowaWebhookController = async (c: Context) => {
                   });
                 }
               } else {
-                logger.warn("GOWA download response has no data.url", { resJson });
+                logger.warn("GOWA download response has no file URL", { resultObj, fullResponse: resJson });
               }
             } else {
               const errText = await resp.text();

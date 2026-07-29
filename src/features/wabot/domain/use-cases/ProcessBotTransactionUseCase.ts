@@ -4,6 +4,7 @@ import { createTransactionUseCase } from "../../../budgeting/domain/use-cases/Cr
 import { prisma } from "../../../../infrastructure/database/prisma.js";
 import { transcribeAudio } from "../../../../infrastructure/api/cloudflareWhisperApi.js";
 import { logger } from "../../../../infrastructure/logger/logger.js";
+import { getCycleBoundaries } from "../../../../utils/cycleBoundaries.js";
 
 type ProcessBotTransactionInput = {
   type: string;
@@ -119,8 +120,14 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     const now = new Date();
     const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
     const weekStart = new Date(now); weekStart.setDate(now.getDate() - 6); weekStart.setHours(0, 0, 0, 0);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const HELP_FOOTER = "\n\n💡 Ketik *!help* untuk bantuan.";
+
+    // Hitung batas siklus secara dinamis berdasarkan payday user (bukan hardcoded tanggal 1)
+    const userPayday = (cmdUser as any).payday ?? 31;
+    const cycle = getCycleBoundaries(now, userPayday);
+    // cycleStart = awal siklus aktif, prevCycleStart = awal siklus sebelumnya
+    const { cycleStart, prevCycleStart, prevCycleEnd, cycleLabel, prevCycleLabel } = cycle;
 
     const formatIDR = (n: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
     const sumExpense = (rows: any[]) => rows.filter(t => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
@@ -152,12 +159,12 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     // === !monthly ===
     if (lowerText === "!monthly") {
       const txs = await prisma.transaction.findMany({
-        where: { userId: cmdUser.id, date: { gte: monthStart } },
+        where: { userId: cmdUser.id, date: { gte: cycleStart } },
         include: { category: true },
         orderBy: { date: "desc" },
       });
-      if (!txs.length) return { success: true, replyText: true, data: { message: `🗓️ Bulan ini belum ada transaksi yang tercatat.${HELP_FOOTER}` } };
-      return { success: true, replyText: true, data: { message: `🗓️ *Rekap Bulan Ini*\n\n💰 Total Keluar: ${formatIDR(sumExpense(txs))}\n📈 Total Masuk: ${formatIDR(sumIncome(txs))}\n📋 Jumlah Transaksi: ${txs.length}${HELP_FOOTER}` } };
+      if (!txs.length) return { success: true, replyText: true, data: { message: `🗓️ Siklus *${cycleLabel}* belum ada transaksi yang tercatat.${HELP_FOOTER}` } };
+      return { success: true, replyText: true, data: { message: `🗓️ *Rekap Siklus ${cycleLabel}*\n\n💰 Total Keluar: ${formatIDR(sumExpense(txs))}\n📈 Total Masuk: ${formatIDR(sumIncome(txs))}\n📋 Jumlah Transaksi: ${txs.length}${HELP_FOOTER}` } };
     }
 
     // === !balance / !pockets ===
@@ -178,7 +185,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
       // 3. Ambil total pengeluaran per kategori bulan ini
       const expenses = await prisma.transaction.groupBy({
         by: ['categoryId'],
-        where: { userId: cmdUser.id, type: "EXPENSE", date: { gte: monthStart } },
+        where: { userId: cmdUser.id, type: "EXPENSE", date: { gte: cycleStart } },
         _sum: { amount: true },
       });
       const expenseMap = Object.fromEntries(expenses.map(e => [e.categoryId, e._sum.amount || 0]));
@@ -200,14 +207,14 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     // === !top ===
     if (lowerText === "!top") {
       const txs = await prisma.transaction.findMany({
-        where: { userId: cmdUser.id, type: "EXPENSE", date: { gte: monthStart } },
+        where: { userId: cmdUser.id, type: "EXPENSE", date: { gte: cycleStart } },
         include: { category: true },
         orderBy: { amount: "desc" },
         take: 3,
       });
-      if (!txs.length) return { success: true, replyText: true, data: { message: `🏆 Belum ada pengeluaran bulan ini.${HELP_FOOTER}` } };
+      if (!txs.length) return { success: true, replyText: true, data: { message: `🏆 Belum ada pengeluaran di siklus ${cycleLabel}.${HELP_FOOTER}` } };
       const lines = txs.map((t, i) => `${i + 1}. ${t.category?.icon || "📌"} ${t.category?.name || "-"}: ${formatIDR(t.amount)} — ${t.note || "-"}`).join("\n");
-      return { success: true, replyText: true, data: { message: `🏆 *Top 3 Pengeluaran Terbesar Bulan Ini*\n\n${lines}${HELP_FOOTER}` } };
+      return { success: true, replyText: true, data: { message: `🏆 *Top 3 Pengeluaran Terbesar — Siklus ${cycleLabel}*\n\n${lines}${HELP_FOOTER}` } };
     }
 
     // === !recent ===
@@ -260,24 +267,155 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
       };
     }
 
+    // === !keep ===
+    // Rollover sisa saldo siklus SEBELUMNYA sebagai Pemasukan Tambahan di siklus berjalan.
+    // Mendukung "Late Claim": bisa dieksekusi kapan saja selama masih dalam siklus aktif,
+    // tidak hanya di awal siklus baru.
+    if (lowerText === "!keep") {
+      // Cari snapshot siklus sebelumnya dari MonthlyFinancialHistory
+      // Kita cari berdasarkan rentang tanggal dinamis (prevCycleStart - prevCycleEnd)
+      const prevHistory = await prisma.monthlyFinancialHistory.findFirst({
+        where: {
+          userId: cmdUser.id,
+          period: { gte: prevCycleStart, lte: prevCycleEnd },
+        },
+        orderBy: { period: "desc" },
+      });
+
+      if (!prevHistory) {
+        return {
+          success: true, replyText: true,
+          data: { message: `❌ Tidak ditemukan data keuangan siklus *${prevCycleLabel}*.\n\nPastikan bot sudah aktif dan ada transaksi di siklus sebelumnya ya!${HELP_FOOTER}` },
+        };
+      }
+
+      // Kalkulasi sisa saldo siklus sebelumnya
+      const totalIncomePrev = (prevHistory.salarySnapshot || 0) + (prevHistory.totalIncome || 0);
+      const surplus = totalIncomePrev - (prevHistory.totalSpent || 0);
+
+      if (surplus <= 0) {
+        return {
+          success: true, replyText: true,
+          data: { message: `ℹ️ Tidak ada sisa saldo dari siklus *${prevCycleLabel}*.\nPengeluaran sudah menyentuh atau melebihi pemasukan siklus tersebut.${HELP_FOOTER}` },
+        };
+      }
+
+      // Guard Anti-Duplikasi: Cek apakah sudah pernah di-keep di siklus AKTIF ini
+      // Note: ini yang memungkinkan "Late Claim" — selama belum pernah di-keep di siklus ini, BOLEH
+      const keepNote = `SISA SALDO SIKLUS ${prevCycleLabel.toUpperCase()}`;
+      const alreadyKept = await prisma.transaction.findFirst({
+        where: { userId: cmdUser.id, note: keepNote, type: "INCOME", date: { gte: cycleStart } },
+      });
+      if (alreadyKept) {
+        return {
+          success: true, replyText: true,
+          data: { message: `⚠️ *Sisa saldo dari siklus ${prevCycleLabel} sudah pernah ditambahkan sebelumnya.*\n\nTidak perlu diulang lagi ya!${HELP_FOOTER}` },
+        };
+      }
+
+      // Cari kategori INCOME default
+      const incomeCategory = await prisma.budgetCategory.findFirst({
+        where: { userId: null, type: "INCOME", isDefault: true },
+      });
+      if (!incomeCategory) {
+        return { success: true, replyText: true, data: { message: `❌ Kategori pemasukan tidak ditemukan. Hubungi admin Kainest.${HELP_FOOTER}` } };
+      }
+
+      // Buat transaksi INCOME dengan keterangan rollover
+      await prisma.transaction.create({
+        data: {
+          userId: cmdUser.id,
+          amount: surplus,
+          type: "INCOME",
+          categoryId: incomeCategory.id,
+          note: keepNote,
+          date: now,
+        },
+      });
+
+      return {
+        success: true, replyText: true,
+        data: { message: `✅ *Sisa saldo berhasil dipindahkan!*\n\n💰 ${formatIDR(surplus)} dari siklus *${prevCycleLabel}* sudah ditambahkan sebagai Pemasukan Tambahan di siklus *${cycleLabel}*.\n\n📝 Keterangan: _${keepNote}_${HELP_FOOTER}` }
+      };
+    }
+
+    // === !dev-blast ===
+    // [MODE TESTING] Paksa bot mengirimkan laporan akhir siklus ke user ini sekarang juga.
+    // Tidak perlu menunggu payday/cron job tengah malam.
+    // HANYA aktif jika NODE_ENV !== 'production' ATAU BOT_ENV_MODE === 'staging'
+    if (lowerText === "!dev-blast") {
+      const isDevMode = process.env.NODE_ENV !== "production" || process.env.BOT_ENV_MODE === "staging";
+      if (!isDevMode) {
+        return { success: true, replyText: true, data: { message: `🔒 Perintah ini hanya tersedia di mode development/staging.${HELP_FOOTER}` } };
+      }
+
+      // Ambil snapshot siklus sebelumnya
+      const prevHistoryForBlast = await prisma.monthlyFinancialHistory.findFirst({
+        where: {
+          userId: cmdUser.id,
+          period: { gte: prevCycleStart, lte: prevCycleEnd },
+        },
+        orderBy: { period: "desc" },
+      });
+
+      if (!prevHistoryForBlast) {
+        return { success: true, replyText: true, data: { message: `⚠️ Tidak ada data siklus *${prevCycleLabel}* untuk di-blast.\n\nCoba catat beberapa transaksi dulu di bulan lalu!${HELP_FOOTER}` } };
+      }
+
+      const totalIncome = (prevHistoryForBlast.salarySnapshot || 0) + (prevHistoryForBlast.totalIncome || 0);
+      const totalExpense = prevHistoryForBlast.totalSpent || 0;
+      const surplus = totalIncome - totalExpense;
+      const surplusLine = surplus > 0
+        ? `💰 *Sisa Saldo:* ${formatIDR(surplus)} ✨\n_(Ketik *!keep* untuk memindahkan ke siklus ini)_`
+        : surplus < 0
+        ? `⚠️ *Defisit:* ${formatIDR(Math.abs(surplus))}`
+        : `⚖️ Saldo pas-pasan.`;
+
+      let pocketsDetail = "_(Tidak ada data kantong)_";
+      if (prevHistoryForBlast.pocketsSnapshot && Array.isArray(prevHistoryForBlast.pocketsSnapshot)) {
+        const lines = (prevHistoryForBlast.pocketsSnapshot as any[]).map((p: any) => {
+          const pct = p.limitAmount > 0 ? Math.round((p.spent / p.limitAmount) * 100) : 0;
+          const bar = pct >= 100 ? "🔴" : pct >= 75 ? "🟡" : "🟢";
+          return `${bar} ${p.icon || "💰"} ${p.categoryName}: ${formatIDR(p.spent)} / ${formatIDR(p.limitAmount)} (${pct}%)`;
+        });
+        if (lines.length) pocketsDetail = lines.join("\n");
+      }
+
+      const blastMsg = `🧪 *[DEV BLAST] LAPORAN AKHIR SIKLUS — ${prevCycleLabel.toUpperCase()}*\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `💵 *Total Pemasukan:* ${formatIDR(totalIncome)}\n` +
+        `🛒 *Total Pengeluaran:* ${formatIDR(totalExpense)}\n` +
+        `${surplusLine}\n\n` +
+        `📦 *Rincian Kantong:*\n${pocketsDetail}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `_(Ini adalah blast simulasi — bukan blast sungguhan)_${HELP_FOOTER}`;
+
+      return { success: true, replyText: true, data: { message: blastMsg } };
+    }
+
     // === !help ===
     if (lowerText === "!help") {
+      const devSection = (process.env.NODE_ENV !== "production" || process.env.BOT_ENV_MODE === "staging")
+        ? `\n\n🧪 *Dev/Staging*\n!dev-blast — Simulasi laporan akhir siklus sekarang`
+        : "";
       return {
         success: true, replyText: true,
         data: {
           message: `🤖 *Kainest Bot — Daftar Perintah*\n\n` +
-            `📋 *Laporan*\n` +
+            `📋 *Laporan Siklus (Payday-based)*\n` +
             `!today   — Rekap pengeluaran hari ini\n` +
             `!weekly  — Rekap 7 hari terakhir\n` +
-            `!monthly — Rekap bulan berjalan\n` +
+            `!monthly — Rekap siklus berjalan (${cycleLabel})\n` +
             `!balance — Sisa saldo tiap kantong\n` +
-            `!top     — Top 3 pengeluaran terbesar bulan ini\n` +
+            `!top     — Top 3 pengeluaran terbesar siklus ini\n` +
             `!recent  — 5 transaksi terakhir\n\n` +
             `⚙️ *Aksi*\n` +
+            `!keep    — Pindahkan sisa saldo siklus lalu ke siklus ini\n` +
             `!undo    — Lihat & konfirmasi hapus transaksi terakhir\n` +
             `!undo Y  — Hapus transaksi terakhir (setelah konfirmasi)\n` +
             `!link KODE — Hubungkan akun & aktifkan grup\n` +
-            `!web     — Dapatkan tautan website Kainest\n\n` +
+            `!web     — Dapatkan tautan website Kainest` +
+            devSection + `\n\n` +
             `💬 *Mencatat Transaksi*\n` +
             `Cukup ketik transaksimu secara natural, contoh:\n` +
             `_Makan siang 25k_ atau _Gajian 3.5jt_`
