@@ -127,7 +127,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     const userPayday = (cmdUser as any).payday ?? 31;
     const cycle = getCycleBoundaries(now, userPayday);
     // cycleStart = awal siklus aktif, prevCycleStart = awal siklus sebelumnya
-    const { cycleStart, prevCycleStart, prevCycleEnd, cycleLabel, prevCycleLabel } = cycle;
+    const { cycleStart, cycleEnd, prevCycleStart, prevCycleEnd, cycleLabel, prevCycleLabel } = cycle;
 
     const formatIDR = (n: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
     const sumExpense = (rows: any[]) => rows.filter(t => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
@@ -174,34 +174,32 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
         where: { userId: cmdUser.id },
         include: { category: true },
       });
-      if (!pockets.length) return { success: true, replyText: true, data: { message: `💼 Belum ada kantong yang dibuat. Atur kantong di web Kainest dulu ya!${HELP_FOOTER}` } };
+      if (!pockets.length) return { success: true, replyText: true, data: { message: `📌 Belum ada kantong yang dibuat. Atur kantong di web Kainest dulu ya!${HELP_FOOTER}` } };
 
       // 2. Ambil gaji bulan ini dari MonthlyFinancialHistory untuk hitung limit (jika pakai persentase)
       const monthlyHistory = await prisma.monthlyFinancialHistory.findFirst({
-        where: { userId: cmdUser.id, period: monthStart },
+        where: { userId: cmdUser.id, period: cycle.period },
       });
       const salary = monthlyHistory?.salarySnapshot || 0;
 
       // 3. Ambil total pengeluaran per kategori bulan ini
       const expenses = await prisma.transaction.groupBy({
-        by: ['categoryId'],
-        where: { userId: cmdUser.id, type: "EXPENSE", date: { gte: cycleStart } },
+        by: ["categoryId"],
         _sum: { amount: true },
+        where: { userId: cmdUser.id, type: "EXPENSE", date: { gte: cycleStart, lte: cycleEnd } },
       });
-      const expenseMap = Object.fromEntries(expenses.map(e => [e.categoryId, e._sum.amount || 0]));
 
-      // 4. Format laporan
-      const lines = pockets.map(p => {
-        let limit = 0;
-        if (p.limitAmount && p.limitAmount > 0) limit = p.limitAmount;
-        else if (p.percentage && p.percentage > 0) limit = Math.floor((p.percentage / 100) * salary);
-        
-        const spent = expenseMap[p.categoryId] || 0;
+      const lines = pockets.map((p) => {
+        const spent = expenses.find((e) => e.categoryId === p.categoryId)?._sum.amount || 0;
+        let limit = p.limitAmount || 0;
+        if (p.percentage != null && p.percentage > 0 && salary > 0) {
+          limit = Math.floor((p.percentage / 100) * salary);
+        }
         const sisa = limit - spent;
-        return `${p.category?.icon || "📌"} *${p.category?.name || "-"}*: Sisa ${formatIDR(sisa > 0 ? sisa : 0)} dari ${formatIDR(limit)}`;
+        return `${p.category?.icon || "💼"} *${p.category?.name || "-"}*: Sisa ${formatIDR(sisa > 0 ? sisa : 0)} dari ${formatIDR(limit)}`;
       }).join("\n");
       
-      return { success: true, replyText: true, data: { message: `💼 *Saldo Kantong Bulan Ini*\n\n${lines}${HELP_FOOTER}` } };
+      return { success: true, replyText: true, data: { message: `💼 *Saldo Kantong Siklus ${cycleLabel}*\n\n${lines}${HELP_FOOTER}` } };
     }
 
     // === !top ===
@@ -342,11 +340,12 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     // === !dev-blast ===
     // [MODE TESTING] Paksa bot mengirimkan laporan akhir siklus ke user ini sekarang juga.
     // Tidak perlu menunggu payday/cron job tengah malam.
-    // HANYA aktif jika NODE_ENV !== 'production' ATAU BOT_ENV_MODE === 'staging'
+    // HANYA aktif jika NODE_ENV !== 'production' ATAU BOT_ENV_MODE === 'staging' ATAU user adalah Admin.
     if (lowerText === "!dev-blast") {
       const isDevMode = process.env.NODE_ENV !== "production" || process.env.BOT_ENV_MODE === "staging";
-      if (!isDevMode) {
-        return { success: true, replyText: true, data: { message: `🔒 Perintah ini hanya tersedia di mode development/staging.${HELP_FOOTER}` } };
+      const isAdmin = (cmdUser as any).role === "admin";
+      if (!isDevMode && !isAdmin) {
+        return { success: true, replyText: true, data: { message: `🚫 Perintah ini hanya tersedia di mode development/staging atau khusus Admin Kainest.${HELP_FOOTER}` } };
       }
 
       // Ambil snapshot siklus sebelumnya

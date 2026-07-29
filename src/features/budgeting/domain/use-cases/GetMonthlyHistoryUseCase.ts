@@ -15,6 +15,7 @@ export const getMonthlyHistoryUseCase = async (userId: string) => {
         period: item.period,
         salarySnapshot: item.salarySnapshot,
         totalBudgeted: item.totalBudgeted,
+        totalIncome: item.totalIncome,
         totalSaved: item.totalSaved,
         totalSpent: item.totalSpent,
         pocketsSnapshot: item.pocketsSnapshot,
