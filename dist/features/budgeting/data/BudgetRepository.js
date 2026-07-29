@@ -1,5 +1,6 @@
 // BudgetRepository.ts
 import { prisma } from "../../../infrastructure/database/prisma.js";
+import { getCycleBoundaries } from "../../../utils/cycleBoundaries.js";
 export const budgetRepository = {
     /**
      * Cari Monthly History user di bulan tertentu
@@ -23,10 +24,21 @@ export const budgetRepository = {
             orderBy: { period: "desc" },
         });
     },
+    /**
+     * Mengambil detail User berdasarkan ID
+     */
     async findUserById(userId) {
         return prisma.user.findUnique({
             where: { id: userId },
-            select: { salary: true }
+        });
+    },
+    /**
+     * Update saldo kantong
+     */
+    async updatePocket(pocketId, updatedData) {
+        return prisma.budgetPocket.update({
+            where: { id: pocketId },
+            data: updatedData,
         });
     },
     async updateUserSalary(userId, salary, payday) {
@@ -40,23 +52,13 @@ export const budgetRepository = {
         });
     },
     /**
-     * Ambil semua kategori (Global + Custom milik User)
+     * Mengambil semua kategori default / global
      */
     async findAllCategories(userId) {
         return prisma.budgetCategory.findMany({
-            where: userId ? {
-                OR: [
-                    { isDefault: true },
-                    { userId: null },
-                    { userId: userId }
-                ]
-            } : {
-                OR: [
-                    { isDefault: true },
-                    { userId: null }
-                ]
+            where: {
+                OR: [{ isDefault: true }, { userId: userId }],
             },
-            orderBy: { name: "asc" },
         });
     },
     /**
@@ -74,21 +76,22 @@ export const budgetRepository = {
         });
     },
     /**
-     * CQRS: Write-Time Sync
+     * Write-Time Sync:
      * Menghitung ulang total pengeluaran per kategori untuk suatu bulan
      * dan menyimpannya langsung ke MonthlyFinancialHistory.
      */
     async syncMonthlyHistory(userId, targetDate) {
         try {
-            const startDate = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), 1));
-            const nextMonthStart = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth() + 1, 1));
-            const endDate = new Date(nextMonthStart.getTime() - 1);
-            let history = await this.findMonthlyHistory(userId, startDate);
+            const user = await this.findUserById(userId);
+            if (!user)
+                return;
+            const payday = user.payday ?? 31;
+            const { cycleStart, cycleEnd, period } = getCycleBoundaries(targetDate, payday);
+            const startDate = cycleStart;
+            const endDate = cycleEnd;
+            let history = await this.findMonthlyHistory(userId, period);
             if (!history) {
                 // Jika history tidak ada, buat baru berdasarkan konfigurasi pocket user saat ini
-                const user = await this.findUserById(userId);
-                if (!user)
-                    return;
                 const activePockets = await prisma.budgetPocket.findMany({
                     where: { userId },
                     include: { category: true }
@@ -117,7 +120,7 @@ export const budgetRepository = {
                     totalSaved = savingPocket.limitAmount;
                     totalBudgeted -= savingPocket.limitAmount;
                 }
-                history = await this.upsertMonthlyHistory(userId, startDate, {
+                history = await this.upsertMonthlyHistory(userId, period, {
                     salarySnapshot: user.salary || 0,
                     totalBudgeted: totalBudgeted,
                     totalSaved: totalSaved,

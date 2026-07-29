@@ -80,8 +80,13 @@ export function getCycleBoundaries(now: Date, payday: number) {
     "Januari", "Februari", "Maret", "April", "Mei", "Juni",
     "Juli", "Agustus", "September", "Oktober", "November", "Desember",
   ];
-  const cycleLabel = `${MONTHS_ID[cycleStart.getMonth()]} ${cycleStart.getFullYear()}`;
-  const prevCycleLabel = `${MONTHS_ID[prevCycleStart.getMonth()]} ${prevCycleStart.getFullYear()}`;
+  // Gunakan cycleEnd untuk pelabelan, karena siklus 30 Juni - 30 Juli dianggap sebagai siklus Juli
+  const cycleLabel = `${MONTHS_ID[cycleEnd.getMonth()]} ${cycleEnd.getFullYear()}`;
+  const prevCycleLabel = `${MONTHS_ID[prevCycleEnd.getMonth()]} ${prevCycleEnd.getFullYear()}`;
+
+  // Tentukan 'period' (1st of the month dari cycleEnd) untuk kompatibilitas dengan key MonthlyFinancialHistory
+  const period = new Date(Date.UTC(cycleEnd.getFullYear(), cycleEnd.getMonth(), 1));
+  const prevPeriod = new Date(Date.UTC(prevCycleEnd.getFullYear(), prevCycleEnd.getMonth(), 1));
 
   return {
     /** Awal siklus keuangan yang sedang berjalan */
@@ -96,5 +101,9 @@ export function getCycleBoundaries(now: Date, payday: number) {
     cycleLabel,
     /** Label siklus sebelumnya dalam bahasa Indonesia */
     prevCycleLabel,
+    /** Date (1st of month) untuk primary key MonthlyFinancialHistory siklus aktif */
+    period,
+    /** Date (1st of month) untuk primary key MonthlyFinancialHistory siklus sebelumnya */
+    prevPeriod,
   };
 }
