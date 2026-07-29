@@ -29,10 +29,14 @@ export const budgetRepository = {
             select: { salary: true }
         });
     },
-    async updateUserSalary(userId, salary) {
+    async updateUserSalary(userId, salary, payday) {
         return prisma.user.update({
             where: { id: userId },
-            data: { salary }
+            data: {
+                salary,
+                // Hanya update payday jika dikirimkan (undefined = tidak diubah)
+                ...(payday !== undefined ? { payday } : {}),
+            }
         });
     },
     /**

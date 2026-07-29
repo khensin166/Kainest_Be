@@ -1,9 +1,9 @@
 import { budgetRepository } from "../../data/BudgetRepository.js";
 export const setupMonthlyBudgetUseCase = async (data) => {
     try {
-        const { userId, salary } = data;
-        // 1. Simpan salary ke User
-        await budgetRepository.updateUserSalary(userId, salary);
+        const { userId, salary, payday } = data;
+        // 1. Simpan salary & payday ke User
+        await budgetRepository.updateUserSalary(userId, salary, payday);
         const now = new Date();
         const period = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
         // Ambil histori lama jika ada (untuk tidak mereset totalSpent atau kantong lain jika bukan setup baru)

@@ -85,6 +85,8 @@ export const setupBudgetController = async (c: Context) => {
     userId,
     salary: body.salary,
     rentAmount: body.rent,
+    // Payday opsional: 1-31, default 31 (akhir bulan). Validasi sederhana.
+    payday: body.payday ? Math.min(31, Math.max(1, Number(body.payday))) : undefined,
   });
 
   if (!result.success) c.status(result.status as any);
