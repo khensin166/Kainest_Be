@@ -5,6 +5,7 @@ import { prisma } from "../../../../infrastructure/database/prisma.js";
 import { transcribeAudio } from "../../../../infrastructure/api/cloudflareWhisperApi.js";
 import { logger } from "../../../../infrastructure/logger/logger.js";
 import { getCycleBoundaries } from "../../../../utils/cycleBoundaries.js";
+import { processUserReset } from "../../../budgeting/services/MonthlyResetCron.js";
 
 type ProcessBotTransactionInput = {
   type: string;
@@ -358,7 +359,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
       });
 
       if (!prevHistoryForBlast) {
-        return { success: true, replyText: true, data: { message: `⚠️ Tidak ada data siklus *${prevCycleLabel}* untuk di-blast.\n\nCoba catat beberapa transaksi dulu di bulan lalu!${HELP_FOOTER}` } };
+        return { success: true, replyText: true, data: { message: `🤷‍♂️ Tidak ada data siklus *${prevCycleLabel}* untuk di-blast.\n\nCoba catat beberapa transaksi dulu di bulan lalu!${HELP_FOOTER}` } };
       }
 
       const totalIncome = (prevHistoryForBlast.salarySnapshot || 0) + (prevHistoryForBlast.totalIncome || 0);
@@ -380,7 +381,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
         if (lines.length) pocketsDetail = lines.join("\n");
       }
 
-      const blastMsg = `🧪 *[DEV BLAST] LAPORAN AKHIR SIKLUS — ${prevCycleLabel.toUpperCase()}*\n` +
+      const blastMsg = `🚨 *[DEV BLAST] LAPORAN AKHIR SIKLUS — ${prevCycleLabel.toUpperCase()}*\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `💵 *Total Pemasukan:* ${formatIDR(totalIncome)}\n` +
         `🛒 *Total Pengeluaran:* ${formatIDR(totalExpense)}\n` +
@@ -390,6 +391,29 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
         `_(Ini adalah blast simulasi — bukan blast sungguhan)_${HELP_FOOTER}`;
 
       return { success: true, replyText: true, data: { message: blastMsg } };
+    }
+
+    // === !dev-cron ===
+    // [MODE TESTING] Trigger fungsionalitas aseli dari Scheduler (Cron)
+    // HANYA aktif untuk Admin.
+    if (lowerText === "!dev-cron") {
+      const isAdmin = (cmdUser as any).role === "admin";
+      if (!isAdmin) {
+        return { success: true, replyText: true, data: { message: `🚫 Perintah ini khusus Admin Kainest.${HELP_FOOTER}` } };
+      }
+
+      // Jalankan Cron Reset asinkronus agar bot tidak nunggu kelamaan
+      processUserReset({
+        id: cmdUser.id,
+        name: (cmdUser as any).name || "Admin",
+        payday: (cmdUser as any).payday,
+        waBotConfig: { baseUrl: "" }, // baseUrl tidak dipakai langsung oleh sendTextViaGowa karena ambil env
+        botActiveGroups: [{ groupId: data.groupId || cmdUser.whatsappJid }], 
+      }).catch(err => {
+        logger.error("[dev-cron] Error simulating cron reset", { error: err.message });
+      });
+
+      return { success: true, replyText: true, data: { message: `⚙️ *[DEV CRON]* Menjalankan fungsi processUserReset secara asinkronus... Tunggu laporannya masuk!${HELP_FOOTER}` } };
     }
 
     // === !help ===
