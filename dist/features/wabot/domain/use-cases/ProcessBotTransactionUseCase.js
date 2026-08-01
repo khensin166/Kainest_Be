@@ -5,6 +5,7 @@ import { prisma } from "../../../../infrastructure/database/prisma.js";
 import { transcribeAudio } from "../../../../infrastructure/api/cloudflareWhisperApi.js";
 import { logger } from "../../../../infrastructure/logger/logger.js";
 import { getCycleBoundaries } from "../../../../utils/cycleBoundaries.js";
+import { processUserReset } from "../../../budgeting/services/MonthlyResetCron.js";
 // Pesan onboarding untuk user baru yang mengirim pesan pertama kali
 const HELP_FOOTER_CONST = "\n\n💡 Ketik *!help* untuk bantuan.";
 const ONBOARDING_MESSAGE = `Kamu siapanyakkkk? 👀
@@ -321,7 +322,7 @@ export const processBotTransactionUseCase = async (data) => {
                 orderBy: { period: "desc" },
             });
             if (!prevHistoryForBlast) {
-                return { success: true, replyText: true, data: { message: `⚠️ Tidak ada data siklus *${prevCycleLabel}* untuk di-blast.\n\nCoba catat beberapa transaksi dulu di bulan lalu!${HELP_FOOTER}` } };
+                return { success: true, replyText: true, data: { message: `🤷‍♂️ Tidak ada data siklus *${prevCycleLabel}* untuk di-blast.\n\nCoba catat beberapa transaksi dulu di bulan lalu!${HELP_FOOTER}` } };
             }
             const totalIncome = (prevHistoryForBlast.salarySnapshot || 0) + (prevHistoryForBlast.totalIncome || 0);
             const totalExpense = prevHistoryForBlast.totalSpent || 0;
@@ -341,7 +342,7 @@ export const processBotTransactionUseCase = async (data) => {
                 if (lines.length)
                     pocketsDetail = lines.join("\n");
             }
-            const blastMsg = `🧪 *[DEV BLAST] LAPORAN AKHIR SIKLUS — ${prevCycleLabel.toUpperCase()}*\n` +
+            const blastMsg = `🚨 *[DEV BLAST] LAPORAN AKHIR SIKLUS — ${prevCycleLabel.toUpperCase()}*\n` +
                 `━━━━━━━━━━━━━━━━━━━━\n` +
                 `💵 *Total Pemasukan:* ${formatIDR(totalIncome)}\n` +
                 `🛒 *Total Pengeluaran:* ${formatIDR(totalExpense)}\n` +
@@ -350,6 +351,26 @@ export const processBotTransactionUseCase = async (data) => {
                 `━━━━━━━━━━━━━━━━━━━━\n` +
                 `_(Ini adalah blast simulasi — bukan blast sungguhan)_${HELP_FOOTER}`;
             return { success: true, replyText: true, data: { message: blastMsg } };
+        }
+        // === !dev-cron ===
+        // [MODE TESTING] Trigger fungsionalitas aseli dari Scheduler (Cron)
+        // HANYA aktif untuk Admin.
+        if (lowerText === "!dev-cron") {
+            const isAdmin = cmdUser.role === "admin";
+            if (!isAdmin) {
+                return { success: true, replyText: true, data: { message: `🚫 Perintah ini khusus Admin Kainest.${HELP_FOOTER}` } };
+            }
+            // Jalankan Cron Reset asinkronus agar bot tidak nunggu kelamaan
+            processUserReset({
+                id: cmdUser.id,
+                name: cmdUser.name || "Admin",
+                payday: cmdUser.payday,
+                waBotConfig: { baseUrl: "" }, // baseUrl tidak dipakai langsung oleh sendTextViaGowa karena ambil env
+                botActiveGroups: [{ groupId: data.groupId || cmdUser.whatsappJid }],
+            }).catch(err => {
+                logger.error("[dev-cron] Error simulating cron reset", { error: err.message });
+            });
+            return { success: true, replyText: true, data: { message: `⚙️ *[DEV CRON]* Menjalankan fungsi processUserReset secara asinkronus... Tunggu laporannya masuk!${HELP_FOOTER}` } };
         }
         // === !help ===
         if (lowerText === "!help") {

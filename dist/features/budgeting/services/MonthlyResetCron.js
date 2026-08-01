@@ -14,6 +14,7 @@ import * as schedule from "node-schedule";
 import { prisma } from "../../../infrastructure/database/prisma.js";
 import { groqService } from "../../../infrastructure/ai/groqService.js";
 import { logger } from "../../../infrastructure/logger/logger.js";
+import { getCycleBoundaries } from "../../../utils/cycleBoundaries.js";
 // ── Env config ───────────────────────────────────────────────────────────────
 const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
 const GOWA_API_KEY = process.env.WA_BOT_API_KEY || process.env.GOWA_API_KEY || "";
@@ -64,33 +65,39 @@ function getLastDayOfMonth(year, month) {
 // ── Core: Deteksi apakah hari ini adalah hari reset untuk user tertentu ───────
 function isTodayResetDay(payday) {
     const now = new Date();
-    const today = now.getDate();
-    const lastDay = getLastDayOfMonth(now.getFullYear(), now.getMonth());
-    // Kasus normal: payday tepat hari ini
-    if (payday === today)
-        return true;
-    // Kasus capping: payday > hari terakhir bulan ini, dan hari ini adalah hari terakhir
-    // Contoh: payday=31 di bulan April (30 hari) → reset di tanggal 30
-    if (payday > lastDay && today === lastDay)
-        return true;
-    return false;
+    // Kita ingin reset berjalan 1 hari SETELAH payday efektif.
+    // Cari tahu tanggal "kemarin", lalu cek apakah kemarin adalah payday efektif.
+    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const yYear = yesterday.getFullYear();
+    const yMonth = yesterday.getMonth();
+    const yDate = yesterday.getDate();
+    const lastDayOfYesterdayMonth = getLastDayOfMonth(yYear, yMonth);
+    const effectivePayday = Math.min(payday, lastDayOfYesterdayMonth);
+    return yDate === effectivePayday;
 }
 // ── Core: Kalkulasi ringkasan keuangan siklus yang berakhir ─────────────────
-async function calculateCycleSummary(userId) {
+async function calculateCycleSummary(userId, payday) {
     const now = new Date();
-    // Siklus yang baru berakhir adalah bulan lalu (karena kita sudah di hari reset = hari pertama siklus baru)
-    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    // "Kemarin" = hari payday yang baru saja terlewati (misal: 31 Juli).
+    // Cron ini dijalankan 1 hari setelah payday (misal: 1 Agustus).
+    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    // Dari sudut pandang "kemarin" (= hari payday), siklus yang aktif ADALAH siklus yang baru saja selesai.
+    // Kita ambil 'prevPeriod' karena:
+    //   - getCycleBoundaries(kemarin=31 Juli, payday=31) akan mendeteksi bahwa kemarin >= payday,
+    //     sehingga 'period' = siklus baru (1 Agustus), BUKAN siklus yang baru selesai.
+    //   - Siklus yang baru selesai ada di 'prevPeriod' (1 Juli) dan labelnya di 'prevCycleLabel'.
+    const cycle = getCycleBoundaries(yesterday, payday);
     const history = await prisma.monthlyFinancialHistory.findFirst({
         where: {
             userId,
-            period: prevMonth,
+            period: cycle.prevPeriod, // ← Siklus yang BARU SAJA SELESAI, bukan siklus baru
         },
     });
     const salary = history?.salarySnapshot || 0;
     const totalExpense = history?.totalSpent || 0;
     const totalIncome = (history?.totalIncome || 0) + salary;
     const surplus = totalIncome - totalExpense;
-    const periodLabel = formatMonthIndonesian(prevMonth);
+    const periodLabel = cycle.prevCycleLabel; // ← Label siklus yang baru selesai (misal: "Juli 2026")
     // Format ringkasan per kantong dari snapshot JSON
     let pocketsDetail = "";
     if (history?.pocketsSnapshot && Array.isArray(history.pocketsSnapshot)) {
@@ -126,9 +133,10 @@ JANGAN menyebut nama bulan dalam kalimat karena sudah ada di header pesan.`;
     }
 }
 // ── Core: Proses reset & blast untuk satu user ───────────────────────────────
-async function processUserReset(user) {
+export async function processUserReset(user) {
     logger.info(`[MonthlyReset] Memproses reset untuk user: ${user.name || user.id}`);
-    const summary = await calculateCycleSummary(user.id);
+    const payday = user.payday ?? 31;
+    const summary = await calculateCycleSummary(user.id, payday);
     const aiInsight = await generateAiInsight(summary);
     // Susun pesan blast
     const surplusLine = summary.surplus > 0
@@ -180,7 +188,8 @@ async function runMonthlyReset() {
             if (!user.botActiveGroups.length)
                 continue;
             // Cek apakah hari ini adalah hari reset user ini
-            if (!isTodayResetDay(user.payday))
+            const payday = user.payday ?? 31;
+            if (!isTodayResetDay(payday))
                 continue;
             await processUserReset(user);
             processedCount++;
