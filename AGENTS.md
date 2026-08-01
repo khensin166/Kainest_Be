@@ -212,3 +212,9 @@ docker compose up -d
   2. Ubah kredensial *Bearer Token* di `.env` backend dari Groq Key menjadi Token OmniRoute (`sk-7c24274b5ef686dc-843f72-3887ff4a` atau buat kunci production baru).
   3. Ubah nama model di `groqService.js` (yang dikirim dalam JSON body) dari `llama-3.3-70b-versatile` menjadi `"auto"`.
   4. Perhatikan bahwa `x-omniroute-*` response header dapat dimanfaatkan (jika perlu log latensi cache). Karena menggunakan format OpenAI (termasuk dukungan `response_format: json_object`), tidak perlu merombak fungsi parsing AI.
+
+## Update 1 Agustus 2026
+- **Backend (Perbaikan Logika Payday Rollover & Cron Testing)**:
+  - **Pergeseran Waktu Blast**: Logika pengecekan hari reset (isTodayResetDay) di MonthlyResetCron.ts diubah menjadi **H+1**. Kini cron memeriksa apakah "kemarin" adalah hari *payday*. Jika *payday* tanggal 31, blast akan terkirim pada tanggal 1 bulan berikutnya pukul 00:10 WIB. Ini menghindari masalah bulan belum usai saat laporan dikirimkan.
+  - **Sinkronisasi Siklus**: Fungsi calculateCycleSummary kini memanggil getCycleBoundaries (sama seperti bot) untuk mencari data riwayat secara akurat. Pengambilan data riwayat dari database sekarang menggunakan cycle.prevPeriod sehingga selalu mengenai siklus yang baru saja berakhir, alih-alih melakukan *hardcode* ke tanggal 1 bulan sebelumnya.
+  - **Testing Cron di Production**: Ditambahkan perintah bot rahasia !dev-cron untuk menguji cron *Monthly Reset* di VPS (production). Perintah ini secara asinkron memanggil logika internal cron (processUserReset) secara langsung. Hanya dapat dijalankan oleh akun dengan ole: "admin". Command !dev-blast juga diperbarui agar Admin bisa menggunakannya di production tanpa perlu environment staging.
