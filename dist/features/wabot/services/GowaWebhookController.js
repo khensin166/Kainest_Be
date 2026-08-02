@@ -3,6 +3,7 @@
 // GOWA Webhook Payload format: https://github.com/aldinokemal/go-whatsapp-web-multidevice
 import { processBotTransactionUseCase } from "../domain/use-cases/ProcessBotTransactionUseCase.js";
 import { logger } from "../../../infrastructure/logger/logger.js";
+import { asyncContext } from "../../../infrastructure/logger/asyncContext.js";
 // URL & API Key GOWA (diambil dari .env, isi saat deploy di VPS)
 const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
 const GOWA_API_KEY = process.env.WA_BOT_API_KEY || process.env.GOWA_API_KEY || "";
@@ -78,7 +79,9 @@ async function sendPresenceViaGowa(phone, action) {
 // ─────────────────────────────────────────────────────────────────────────────
 export const gowaWebhookController = async (c) => {
     const startTime = Date.now();
-    let senderPhone = "unknown";
+    let senderPhone = "";
+    // Ambil correlationId yang diset oleh LoggingMiddleware
+    const correlationId = c.get("correlationId");
     try {
         // 1. Parsing payload dari GOWA v8.9
         // Struktur baru: { event, device_id, payload: { id, from, body, chat_id, is_from_me, timestamp } }
@@ -295,8 +298,19 @@ export const gowaWebhookController = async (c) => {
                 });
             }
         };
-        // Jalankan background job
-        runBackground();
+        // Jalankan background job dengan mewarisi correlationId
+        if (correlationId) {
+            const store = new Map();
+            store.set("traceId", correlationId);
+            asyncContext.run(store, () => {
+                logger.info(`[GowaWebhook] Mulai memproses pesan dari ${senderPhone} ...`);
+                runBackground();
+            });
+        }
+        else {
+            logger.info(`[GowaWebhook] Mulai memproses pesan dari ${senderPhone} ...`);
+            runBackground();
+        }
         // Langsung return 200 OK ke GOWA (Mencegah "context deadline exceeded" / Timeout Retry)
         return c.json({ success: true, status: "processing_in_background" }, 200);
     }

@@ -5,6 +5,7 @@
 import { Context } from "hono";
 import { processBotTransactionUseCase } from "../domain/use-cases/ProcessBotTransactionUseCase.js";
 import { logger } from "../../../infrastructure/logger/logger.js";
+import { asyncContext } from "../../../infrastructure/logger/asyncContext.js";
 
 // URL & API Key GOWA (diambil dari .env, isi saat deploy di VPS)
 const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
@@ -96,7 +97,10 @@ async function sendPresenceViaGowa(phone: string, action: "start" | "stop"): Pro
 // ─────────────────────────────────────────────────────────────────────────────
 export const gowaWebhookController = async (c: Context) => {
   const startTime = Date.now();
-  let senderPhone = "unknown";
+  let senderPhone = "";
+  
+  // Ambil correlationId yang diset oleh LoggingMiddleware
+  const correlationId = c.get("correlationId");
 
   try {
     // 1. Parsing payload dari GOWA v8.9
@@ -345,8 +349,18 @@ export const gowaWebhookController = async (c: Context) => {
       }
     };
 
-    // Jalankan background job
-    runBackground();
+    // Jalankan background job dengan mewarisi correlationId
+    if (correlationId) {
+      const store = new Map<string, any>();
+      store.set("traceId", correlationId);
+      asyncContext.run(store, () => {
+        logger.info(`[GowaWebhook] Mulai memproses pesan dari ${senderPhone} ...`);
+        runBackground();
+      });
+    } else {
+      logger.info(`[GowaWebhook] Mulai memproses pesan dari ${senderPhone} ...`);
+      runBackground();
+    }
 
     // Langsung return 200 OK ke GOWA (Mencegah "context deadline exceeded" / Timeout Retry)
     return c.json({ success: true, status: "processing_in_background" }, 200);

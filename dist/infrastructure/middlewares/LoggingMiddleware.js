@@ -58,6 +58,27 @@ const writeToFile = async (logEntry) => {
 // =========================================
 // 🚦 Middleware Utama
 // =========================================
+/**
+ * Fungsi sanitasi untuk menyembunyikan data sensitif di log
+ */
+const sanitizePayload = (payload) => {
+    if (typeof payload !== "object" || payload === null)
+        return payload;
+    if (Array.isArray(payload)) {
+        return payload.map(sanitizePayload);
+    }
+    const sanitized = { ...payload };
+    const sensitiveKeys = ["password", "token", "secret", "authorization", "api_key", "apikey", "credential"];
+    for (const key of Object.keys(sanitized)) {
+        if (sensitiveKeys.some((sk) => key.toLowerCase().includes(sk))) {
+            sanitized[key] = "[HIDDEN]";
+        }
+        else if (typeof sanitized[key] === "object") {
+            sanitized[key] = sanitizePayload(sanitized[key]);
+        }
+    }
+    return sanitized;
+};
 export const loggingMiddleware = async (c, next) => {
     const startTime = Date.now();
     // Ambil correlation ID dari header (jika ada, misal dari frontend)
@@ -69,6 +90,28 @@ export const loggingMiddleware = async (c, next) => {
     // Buat store baru untuk request ini
     const store = new Map();
     store.set("traceId", correlationId);
+    let requestPayload = undefined;
+    // Baca payload khusus POST, PUT, PATCH dengan aman menggunakan clone()
+    if (["POST", "PUT", "PATCH"].includes(c.req.method)) {
+        try {
+            const clonedReq = c.req.raw.clone();
+            const contentType = clonedReq.headers.get("content-type") || "";
+            if (contentType.includes("application/json")) {
+                const body = await clonedReq.json();
+                requestPayload = sanitizePayload(body);
+            }
+            else if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+                requestPayload = "[Form Data / Multipart]";
+            }
+            else {
+                const textBody = await clonedReq.text();
+                requestPayload = textBody.substring(0, 1000); // Batasi panjang log teks
+            }
+        }
+        catch (e) {
+            requestPayload = "[Unparseable Body]";
+        }
+    }
     // Jalankan handler berikutnya di dalam context
     await asyncContext.run(store, async () => {
         await next();
@@ -93,6 +136,7 @@ export const loggingMiddleware = async (c, next) => {
         status,
         response_code: responseCode,
         latency_ms: latencyMs,
+        payload: requestPayload,
         message: status === "success"
             ? "Request processed successfully"
             : `Request failed with status ${responseCode}`,
