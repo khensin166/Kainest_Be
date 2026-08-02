@@ -84,7 +84,10 @@ export const setupBudgetController = async (c) => {
 // === Get Dashboard Summary ===
 export const getSummaryController = async (c) => {
     const userId = c.get("userId");
-    const result = await getMonthlySummaryUseCase(userId);
+    // Ambil payday user untuk menentukan siklus yang tepat
+    const user = await budgetRepository.findUserById(userId);
+    const payday = user?.payday ?? 31;
+    const result = await getMonthlySummaryUseCase(userId, payday);
     if (!result.success)
         c.status(result.status);
     return c.json(result);
@@ -120,7 +123,10 @@ export const evaluateBudgetController = async (c) => {
 // === Get Daily Trend untuk Grafik ===
 export const getTrendController = async (c) => {
     const userId = c.get("userId");
-    const result = await getSpendingTrendUseCase(userId);
+    // Ambil payday user untuk menentukan siklus yang tepat
+    const user = await budgetRepository.findUserById(userId);
+    const payday = user?.payday ?? 31;
+    const result = await getSpendingTrendUseCase(userId, payday);
     if (!result.success)
         c.status(result.status);
     return c.json(result);
@@ -130,6 +136,9 @@ export const getTransactionsController = async (c) => {
     const userId = c.get("userId");
     // URL contoh: /budget/transactions?page=1&limit=10&search=soto&type=EXPENSE
     const { page, limit, startDate, endDate, search, type } = c.req.query();
+    // Ambil payday user agar default filter siklus benar
+    const user = await budgetRepository.findUserById(userId);
+    const payday = user?.payday ?? 31;
     const result = await getTransactionsUseCase({
         userId,
         page,
@@ -138,6 +147,7 @@ export const getTransactionsController = async (c) => {
         endDate,
         search,
         type: type,
+        payday,
     });
     if (!result.success)
         c.status(result.status);

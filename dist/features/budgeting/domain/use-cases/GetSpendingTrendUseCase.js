@@ -1,36 +1,41 @@
 import { transactionRepository } from "../../data/TransactionRepository.js";
+import { getCycleBoundaries } from "../../../../utils/cycleBoundaries.js";
 const aggregateByDate = (rawTrend) => {
     const aggregated = {};
-    rawTrend.forEach(item => {
-        const dateStr = item.date.toISOString().split('T')[0];
+    rawTrend.forEach((item) => {
+        const dateStr = item.date.toISOString().split("T")[0];
         if (!aggregated[dateStr])
             aggregated[dateStr] = 0;
-        aggregated[dateStr] += (item._sum.amount || 0);
+        aggregated[dateStr] += item._sum.amount || 0;
     });
-    return Object.keys(aggregated).map(date => ({ date, total: aggregated[date] }));
+    return Object.keys(aggregated).map((date) => ({ date, total: aggregated[date] }));
 };
-export const getSpendingTrendUseCase = async (userId) => {
+export const getSpendingTrendUseCase = async (userId, payday) => {
     try {
-        // 1. Tentukan Range Tanggal Bulan Ini (Konsisten UTC)
         const now = new Date();
-        const startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-        const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-        const endDate = new Date(nextMonthStart.getTime() - 1);
-        // 2. Fetch data expense dan income secara paralel
+        const effectivePayday = payday ?? 31;
+        // Gunakan siklus payday, bukan awal/akhir bulan kalender
+        const { cycleStart, cycleEnd, cycleLabel, dateRangeLabel } = getCycleBoundaries(now, effectivePayday);
+        // Fetch data expense dan income secara paralel dalam rentang siklus
         const [rawExpense, rawIncome] = await Promise.all([
-            transactionRepository.getDailyTrend(userId, startDate, endDate, "EXPENSE"),
-            transactionRepository.getDailyTrend(userId, startDate, endDate, "INCOME"),
+            transactionRepository.getDailyTrend(userId, cycleStart, cycleEnd, "EXPENSE"),
+            transactionRepository.getDailyTrend(userId, cycleStart, cycleEnd, "INCOME"),
         ]);
-        // 3. Agregasi masing-masing
         const expenseTrend = aggregateByDate(rawExpense);
         const incomeTrend = aggregateByDate(rawIncome);
         return {
             success: true,
             data: {
-                month: startDate.toLocaleString('id-ID', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+                month: cycleLabel,
+                cycle: {
+                    label: cycleLabel,
+                    dateRange: dateRangeLabel,
+                    startDate: cycleStart.toISOString(),
+                    endDate: cycleEnd.toISOString(),
+                },
                 expenseTrend,
                 incomeTrend,
-            }
+            },
         };
     }
     catch (error) {
