@@ -108,7 +108,7 @@ export const processBotTransactionUseCase = async (data) => {
         const userPayday = cmdUser.payday ?? 31;
         const cycle = getCycleBoundaries(now, userPayday);
         // cycleStart = awal siklus aktif, prevCycleStart = awal siklus sebelumnya
-        const { cycleStart, cycleEnd, prevCycleStart, prevCycleEnd, cycleLabel, prevCycleLabel } = cycle;
+        const { cycleStart, cycleEnd, prevCycleStart, prevCycleEnd, cycleLabel, prevCycleLabel, dateRangeLabel, prevDateRangeLabel } = cycle;
         const formatIDR = (n) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
         const sumExpense = (rows) => rows.filter(t => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
         const sumIncome = (rows) => rows.filter(t => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
@@ -144,7 +144,7 @@ export const processBotTransactionUseCase = async (data) => {
             });
             if (!txs.length)
                 return { success: true, replyText: true, data: { message: `🗓️ Siklus *${cycleLabel}* belum ada transaksi yang tercatat.${HELP_FOOTER}` } };
-            return { success: true, replyText: true, data: { message: `🗓️ *Rekap Siklus ${cycleLabel}*\n\n💰 Total Keluar: ${formatIDR(sumExpense(txs))}\n📈 Total Masuk: ${formatIDR(sumIncome(txs))}\n📋 Jumlah Transaksi: ${txs.length}${HELP_FOOTER}` } };
+            return { success: true, replyText: true, data: { message: `🗓️ *Rekap Siklus ${cycleLabel}*\n📅 _(${dateRangeLabel})_\n\n💰 Total Keluar: ${formatIDR(sumExpense(txs))}\n📈 Total Masuk: ${formatIDR(sumIncome(txs))}\n📋 Jumlah Transaksi: ${txs.length}${HELP_FOOTER}` } };
         }
         // === !balance / !pockets ===
         if (lowerText === "!balance" || lowerText === "!pockets") {
@@ -175,7 +175,7 @@ export const processBotTransactionUseCase = async (data) => {
                 const sisa = limit - spent;
                 return `${p.category?.icon || "💼"} *${p.category?.name || "-"}*: Sisa ${formatIDR(sisa > 0 ? sisa : 0)} dari ${formatIDR(limit)}`;
             }).join("\n");
-            return { success: true, replyText: true, data: { message: `💼 *Saldo Kantong Siklus ${cycleLabel}*\n\n${lines}${HELP_FOOTER}` } };
+            return { success: true, replyText: true, data: { message: `💼 *Saldo Kantong Siklus ${cycleLabel}*\n📅 _(${dateRangeLabel})_\n\n${lines}${HELP_FOOTER}` } };
         }
         // === !top ===
         if (lowerText === "!top") {
@@ -188,7 +188,7 @@ export const processBotTransactionUseCase = async (data) => {
             if (!txs.length)
                 return { success: true, replyText: true, data: { message: `🏆 Belum ada pengeluaran di siklus ${cycleLabel}.${HELP_FOOTER}` } };
             const lines = txs.map((t, i) => `${i + 1}. ${t.category?.icon || "📌"} ${t.category?.name || "-"}: ${formatIDR(t.amount)} — ${t.note || "-"}`).join("\n");
-            return { success: true, replyText: true, data: { message: `🏆 *Top 3 Pengeluaran Terbesar — Siklus ${cycleLabel}*\n\n${lines}${HELP_FOOTER}` } };
+            return { success: true, replyText: true, data: { message: `🏆 *Top 3 Pengeluaran Terbesar — Siklus ${cycleLabel}*\n📅 _(${dateRangeLabel})_\n\n${lines}${HELP_FOOTER}` } };
         }
         // === !recent ===
         if (lowerText === "!recent") {
@@ -374,8 +374,11 @@ export const processBotTransactionUseCase = async (data) => {
         }
         // === !help ===
         if (lowerText === "!help") {
-            const devSection = (process.env.NODE_ENV !== "production" || process.env.BOT_ENV_MODE === "staging")
-                ? `\n\n🧪 *Dev/Staging*\n!dev-blast — Simulasi laporan akhir siklus sekarang`
+            const isAdmin = cmdUser.role === "admin";
+            const adminSection = isAdmin
+                ? `\n\n⚠️ *Khusus Admin*\n` +
+                    `!dev-cron   — Trigger cron bulanan sekarang juga\n` +
+                    `!dev-blast  — Simulasi blast laporan akhir siklus`
                 : "";
             return {
                 success: true, replyText: true,
@@ -394,7 +397,7 @@ export const processBotTransactionUseCase = async (data) => {
                         `!undo Y  — Hapus transaksi terakhir (setelah konfirmasi)\n` +
                         `!link KODE — Hubungkan akun & aktifkan grup\n` +
                         `!web     — Dapatkan tautan website Kainest` +
-                        devSection + `\n\n` +
+                        adminSection + `\n\n` +
                         `💬 *Mencatat Transaksi*\n` +
                         `Cukup ketik transaksimu secara natural, contoh:\n` +
                         `_Makan siang 25k_ atau _Gajian 3.5jt_`

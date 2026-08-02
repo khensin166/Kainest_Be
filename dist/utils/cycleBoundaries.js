@@ -71,9 +71,13 @@ export function getCycleBoundaries(now, payday) {
         "Januari", "Februari", "Maret", "April", "Mei", "Juni",
         "Juli", "Agustus", "September", "Oktober", "November", "Desember",
     ];
+    const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
     // Gunakan cycleEnd untuk pelabelan, karena siklus 30 Juni - 30 Juli dianggap sebagai siklus Juli
     const cycleLabel = `${MONTHS_ID[cycleEnd.getMonth()]} ${cycleEnd.getFullYear()}`;
     const prevCycleLabel = `${MONTHS_ID[prevCycleEnd.getMonth()]} ${prevCycleEnd.getFullYear()}`;
+    // Rentang tanggal siklus untuk tampilan bot (misal: "25 Jul - 24 Agu")
+    const dateRangeLabel = `${cycleStart.getDate()} ${SHORT_MONTHS[cycleStart.getMonth()]} - ${cycleEnd.getDate()} ${SHORT_MONTHS[cycleEnd.getMonth()]}`;
+    const prevDateRangeLabel = `${prevCycleStart.getDate()} ${SHORT_MONTHS[prevCycleStart.getMonth()]} - ${prevCycleEnd.getDate()} ${SHORT_MONTHS[prevCycleEnd.getMonth()]}`;
     // Tentukan 'period' (1st of the month dari cycleEnd) untuk kompatibilitas dengan key MonthlyFinancialHistory
     const period = new Date(Date.UTC(cycleEnd.getFullYear(), cycleEnd.getMonth(), 1));
     const prevPeriod = new Date(Date.UTC(prevCycleEnd.getFullYear(), prevCycleEnd.getMonth(), 1));
@@ -90,6 +94,10 @@ export function getCycleBoundaries(now, payday) {
         cycleLabel,
         /** Label siklus sebelumnya dalam bahasa Indonesia */
         prevCycleLabel,
+        /** Rentang tanggal siklus aktif (misal: "25 Jul - 24 Agu") */
+        dateRangeLabel,
+        /** Rentang tanggal siklus sebelumnya (misal: "25 Jun - 24 Jul") */
+        prevDateRangeLabel,
         /** Date (1st of month) untuk primary key MonthlyFinancialHistory siklus aktif */
         period,
         /** Date (1st of month) untuk primary key MonthlyFinancialHistory siklus sebelumnya */
