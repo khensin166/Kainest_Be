@@ -96,6 +96,13 @@
   - Memperbaiki *bug* kegagalan transkripsi suara (pesan *error* `"Audio buffer kosong"` dan `"phone: cannot be blank"`). Akar masalahnya adalah hilangnya parameter `?phone=` pada *endpoint download media* GOWA.
   - Memodifikasi `GowaWebhookController.ts` agar menyisipkan `targetPhone` di kueri URL saat mengunduh VN, sehingga data audio dapat diteruskan dengan sukses ke layanan Cloudflare Whisper untuk ditranskripsi ke teks.
 
+## Update 02 Agustus 2026
+- **Frontend & Backend (Payday Cycle Sync & Logging Context)**:
+  - **Payday Cycle Synchronization**: Endpoint backend (`/budget/summary`, `/budget/trend`, `/budget/transactions`) kini secara otomatis menghitung batas tanggal berdasarkan `payday` pengguna menggunakan `getCycleBoundaries`. Respon API kini melampirkan metadata `cycle: { label, dateRange, startDate, endDate }`.
+  - **Automatic Re-fetch on Payday Change**: Pada `useBudgetStore.js`, `setupBudget` kini secara otomatis memicu pembaruan data secara paralel (`fetchDashboardSummary`, `fetchSpendingTrend`, `fetchTransactions`, `fetchMonthlyHistory`) sehingga pengubahan `payday` atau gaji langsung memantulkan data siklus baru ke seluruh halaman aplikasi tanpa perlunya refresh manual.
+  - **Logging Middleware Enrichment**: `LoggingMiddleware.ts` kini mengkloning *request stream* untuk mencatat `payload` JSON dari permintaan `POST`/`PUT`/`PATCH` secara aman dengan fungsi `sanitizePayload` untuk menyembunyikan kata kunci sensitif (`password`, `token`, `secret`, `credential`, dll).
+  - **Webhook Tracing Context**: `GowaWebhookController.ts` kini meneruskan `correlationId` ke dalam tugas latar belakang (*background job*) menggunakan `asyncContext.run`, memungkinkan penelusuran (*tracing*) log end-to-end dari saat HTTP diterima hingga pemrosesan pesan WhatsApp selesai.
+
 ## Catatan untuk Agent Selanjutnya
 1. Pastikan selalu mematuhi instruksi **Web Application Development** yang mengutamakan UI yang estetik, tidak generik, dan menggunakan animasi ringan (micro-animations).
 2. Jika ada masalah terkait rute autentikasi *Better Auth*, perhatikan versi terbarunya (khususnya perbedaan antara endpoint lama `/forget-password` dengan yang baru `/request-password-reset`).
