@@ -3,7 +3,8 @@ import { authMiddleware } from "../../auth/presentation/authMiddleware.js";
 import {
   calculateAndSaveSplitController,
   getSharedSplitController,
-  blastSplitBillController
+  blastSplitBillController,
+  getSplitHistoryController
 } from "../services/splitController.js";
 
 export const splitRoute = new Hono();
@@ -27,3 +28,6 @@ splitRoute.post("/scan", async (c) => {
 
 // 4. Mengirimkan tagihan via WA Blast (Kainest-GOWA)
 splitRoute.post("/blast", blastSplitBillController);
+
+// 5. Riwayat Split Bill
+splitRoute.get("/history", getSplitHistoryController);

@@ -31,4 +31,11 @@ export class SplitBillSessionRepository {
       },
     });
   }
+
+  static async getSessionsByUserId(userId: string) {
+    return await prisma.splitBillSession.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+    });
+  }
 }

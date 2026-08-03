@@ -144,3 +144,22 @@ export const blastSplitBillController = async (c: Context) => {
     return c.json({ error: "Gagal mengirim WhatsApp", details: error.message }, 500);
   }
 };
+
+/**
+ * Mengambil riwayat Split Bill pengguna yang sedang login.
+ */
+export const getSplitHistoryController = async (c: Context) => {
+  try {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session || !session.user) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const history = await SplitBillSessionRepository.getSessionsByUserId(session.user.id);
+
+    return c.json({ status: "success", data: history });
+  } catch (error: any) {
+    console.error("[SplitController] Error getSplitHistory:", error);
+    return c.json({ error: "Internal Server Error" }, 500);
+  }
+};
