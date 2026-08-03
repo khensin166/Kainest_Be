@@ -121,4 +121,7 @@ jobs:
             -e "spreadsheet_id=${{ vars.SPREADSHEET_ID }}" \
             -e "google_api_key_spreadsheet=${{ vars.GOOGLE_API_KEY_SPREADSHEET }}" \
             -e "enable_scheduler=${{ vars.ENABLE_SCHEDULER }}" \
-            -e "grafana_loki_url=${{ vars.GRAFANA_LOKI_URL }}" 
+            -e "grafana_loki_url=${{ vars.GRAFANA_LOKI_URL }}" \
+            -e "receipt_ai_token=${{ vars.RECEIPT_AI_TOKEN }}" \
+            -e "receipt_ai_url=${{ vars.RECEIPT_AI_URL }}"
+

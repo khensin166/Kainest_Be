@@ -92,6 +92,9 @@ model User {
   banExpires  DateTime?
   permissions String[] @default(["budgeting"]) // Array of allowed modules (e.g. ["budgeting", "notes", "todos", "wabot"])
 
+  // Relasi ke Split Bill Session
+  splitBills  SplitBillSession[]
+
   @@schema("kainest")
 }
 
@@ -215,7 +218,7 @@ enum NotePermission {
 }
 
 // ==========================================
-// 💰 FITUR BUDGETING & AI (Kenin System)
+// ðŸ’° FITUR BUDGETING & AI (Kenin System)
 // ==========================================
 
 enum TransactionType {
@@ -409,7 +412,7 @@ model Verification {
 }
 
 // ==========================================
-// 🤖 WHATSAPP BOT SYSTEM
+// ðŸ¤– WHATSAPP BOT SYSTEM
 // ==========================================
 
 model BotActiveGroup {
@@ -463,5 +466,29 @@ model ApiKeys {
   is_active  Boolean  @default(true)
   created_at DateTime @default(now())
 
+  @@schema("kainest")
+}
+
+// ==========================================
+// 🧾 SPLIT BILL SYSTEM
+// ==========================================
+
+model SplitBillSession {
+  id              String   @id @default(uuid())
+  userId          String   // Siapa yang membuat split bill ini
+  receiptImage    String?  // (Opsional) URL gambar struk yang diupload
+  merchant        String?  // Nama tempat makan
+  
+  // Data hitungan dari Receipt AI (Disimpan sebagai JSON agar fleksibel)
+  totalAmount     Int
+  splitData       Json     // Menyimpan JSON detail per orang, subtotal, tax, dll
+  summaryText     String   @db.Text // Teks mentah siap blast WA
+  
+  isPublic        Boolean  @default(true) // Apakah bisa diakses dari web publik
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
   @@schema("kainest")
 }
