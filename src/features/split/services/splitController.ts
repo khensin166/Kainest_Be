@@ -69,6 +69,14 @@ export const scanReceiptController = async (c: Context) => {
 
     const formData = await c.req.formData();
     
+    // Receipt AI Service (FastAPI) membutuhkan field bernama 'image'
+    if (formData.has("file") && !formData.has("image")) {
+      const file = formData.get("file");
+      if (file) {
+        formData.append("image", file);
+      }
+    }
+    
     // Kirim formData (termasuk file) ke AI Service
     const response = await fetch(`${RECEIPT_AI_URL}/receipt/scan`, {
       method: "POST",
