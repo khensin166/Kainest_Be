@@ -98,10 +98,19 @@ export const budgetRepository = {
       const startDate = cycleStart;
       const endDate = cycleEnd;
 
+      // =========================================================
+      // 🔒 IMMUTABILITY GUARDRAIL
+      // Tentukan apakah periode ini adalah bulan lampau (< bulan berjalan)
+      // Bulan berjalan ditentukan dari siklus aktif SEKARANG.
+      // =========================================================
+      const now = new Date();
+      const { period: currentPeriod } = getCycleBoundaries(now, payday);
+      const isPastPeriod = period.getTime() < currentPeriod.getTime();
+
       let history = await this.findMonthlyHistory(userId, period);
       if (!history) {
-        // Jika history tidak ada, buat baru berdasarkan konfigurasi pocket user saat ini
-
+        // Jika history tidak ada, buat baru berdasarkan konfigurasi pocket user saat ini.
+        // (Hanya akan terjadi jika ini periode pertama / bulan berjalan)
         const activePockets = await prisma.budgetPocket.findMany({
           where: { userId },
           include: { category: true }
@@ -109,9 +118,6 @@ export const budgetRepository = {
 
         const salary = user.salary || 0;
 
-        // [FIX: Pocket Rollover] Jika kantong menggunakan persentase, hitung ulang limitAmount
-        // dari gaji user saat ini. Sebelumnya, jika kantong diset dengan percentage,
-        // limitAmount-nya bisa 0 sehingga template bulan baru terlihat kosong.
         const pocketsSnapshot = activePockets.map(p => {
           let limitAmount = p.limitAmount || 0;
           if (p.percentage != null && p.percentage > 0 && salary > 0) {
@@ -163,9 +169,15 @@ export const budgetRepository = {
           }
       }
 
+      // Update realisasi 'spent' per kantong — SELALU BOLEH (untuk transaksi susulan)
       pocketsSnapshot = pocketsSnapshot.map((pocket) => {
         const expense = expenseGrouped.find((e) => e.categoryId === pocket.categoryId);
         pocket.spent = expense?._sum.amount || 0;
+
+        // 🔒 IMMUTABILITY GUARDRAIL untuk bulan lampau:
+        // Jangan sentuh limitAmount pada snapshot bulan lalu.
+        // Field ini sudah terekam dan merupakan kondisi saat bulan itu aktif.
+        // (limitAmount di sini tidak diubah karena kita hanya mengubah .spent)
         return pocket;
       });
 
@@ -186,21 +198,37 @@ export const budgetRepository = {
         totalIncome += (curr._sum.amount || 0);
       });
 
-      await prisma.monthlyFinancialHistory.update({
-        where: { id: history.id },
-        data: {
-          totalSpent: totalSpent,
-          totalSaved: actualSaved,
-          totalIncome: totalIncome,
-          pocketsSnapshot: pocketsSnapshot
-        }
-      });
-
-      console.log(`✅ [Write-Time Sync] History ${startDate.toISOString()} synced. Spent: ${totalSpent}, Income: ${totalIncome}`);
+      if (isPastPeriod) {
+        // 🔒 PERIODE LAMPAU: Hanya perbarui realisasi (spent/income).
+        // salarySnapshot, totalBudgeted, dan limitAmount per kantong TIDAK BOLEH berubah.
+        await prisma.monthlyFinancialHistory.update({
+          where: { id: history.id },
+          data: {
+            totalSpent: totalSpent,
+            totalSaved: actualSaved,
+            totalIncome: totalIncome,
+            pocketsSnapshot: pocketsSnapshot, // 'spent' per kantong di-update, 'limitAmount' TIDAK
+          }
+        });
+        console.log(`✅ [Write-Time Sync - PAST] History ${period.toISOString()} synced (spent only, salary/limits LOCKED). Spent: ${totalSpent}, Income: ${totalIncome}`);
+      } else {
+        // 🟢 PERIODE BERJALAN: Perbarui semua field termasuk totalBudgeted & salarySnapshot.
+        await prisma.monthlyFinancialHistory.update({
+          where: { id: history.id },
+          data: {
+            totalSpent: totalSpent,
+            totalSaved: actualSaved,
+            totalIncome: totalIncome,
+            pocketsSnapshot: pocketsSnapshot
+          }
+        });
+        console.log(`✅ [Write-Time Sync] History ${startDate.toISOString()} synced. Spent: ${totalSpent}, Income: ${totalIncome}`);
+      }
     } catch (e) {
       console.error("❌ [Write-Time Sync] Gagal sinkronisasi:", e);
     }
   },
+
 
   async upsertMonthlyHistory(
     userId: string,

@@ -146,6 +146,7 @@ model AppNotification {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
+  @@index([userId, isRead, createdAt(sort: Desc)]) // Notifikasi lonceng header (unread sorted)
   @@schema("kainest")
 }
 
@@ -218,7 +219,7 @@ enum NotePermission {
 }
 
 // ==========================================
-// ðŸ’° FITUR BUDGETING & AI (Kenin System)
+// 💰 FITUR BUDGETING & AI (Kenin System)
 // ==========================================
 
 enum TransactionType {
@@ -277,6 +278,7 @@ model MonthlyFinancialHistory {
   
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([userId, period]) // Hanya boleh 1 raport per user per bulan
+  @@index([userId, period(sort: Desc)]) // Mempercepat sorting riwayat bulanan
   @@schema("kainest")
 }
 
@@ -319,7 +321,9 @@ model Transaction {
   createdAt DateTime @default(now())
 
   @@index([userId, date])
-  @@index([userId, type]) // Index baru untuk filter INCOME/EXPENSE
+  @@index([userId, type])                      // Filter tipe (INCOME/EXPENSE)
+  @@index([userId, type, date(sort: Desc)])    // Pagination semua transaksi + filter tipe
+  @@index([userId, categoryId, date])          // Agregasi pengeluaran per kantong
   @@index([categoryId])
   @@schema("kainest")
 }
@@ -412,7 +416,7 @@ model Verification {
 }
 
 // ==========================================
-// ðŸ¤– WHATSAPP BOT SYSTEM
+// 🤖 WHATSAPP BOT SYSTEM
 // ==========================================
 
 model BotActiveGroup {
@@ -490,5 +494,6 @@ model SplitBillSession {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@index([userId])
+  @@index([userId, createdAt(sort: Desc)]) // Riwayat split bill user terbaru
   @@schema("kainest")
 }

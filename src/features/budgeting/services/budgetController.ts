@@ -23,6 +23,27 @@ export const createTransactionController = async (c: Context) => {
   const userId = c.get("userId"); // Dari authMiddleware
   const body = await c.req.json();
 
+  // =====================================================
+  // 🔒 GRACE PERIOD VALIDATION: Cek tanggal transaksi
+  // Transaksi > 1 bulan ke belakang → ditolak (Tutup Buku Permanen)
+  // =====================================================
+  if (body.date) {
+    const txDate = new Date(body.date);
+    const now = new Date();
+    // Hitung cutoff: tanggal 1 bulan lalu (1 grace period bulan ke belakang diperbolehkan)
+    const cutoffDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    if (txDate < cutoffDate) {
+      const closedPeriod = txDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+      const gracePeriod = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+        .toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+      return c.json({
+        success: false,
+        code: "TRANSACTION_CLOSED_PERIOD",
+        message: `Periode ${closedPeriod} sudah Tutup Buku Permanen. Penambahan transaksi hanya diperbolehkan sampai 1 bulan ke belakang (${gracePeriod}).`,
+      }, 422);
+    }
+  }
+
   const result = await createTransactionUseCase({
     userId,
     amount: body.amount,
@@ -37,6 +58,7 @@ export const createTransactionController = async (c: Context) => {
   }
   return c.json(result);
 };
+
 
 // === Get Daily Zone Status (UI Utama) ===
 export const getBudgetStatusController = async (c: Context) => {
@@ -156,8 +178,8 @@ export const getTrendController = async (c: Context) => {
 export const getTransactionsController = async (c: Context) => {
   const userId = c.get("userId");
 
-  // URL contoh: /budget/transactions?page=1&limit=10&search=soto&type=EXPENSE
-  const { page, limit, startDate, endDate, search, type } = c.req.query();
+  // URL contoh: /budget/transactions?page=1&limit=10&search=soto&type=EXPENSE&scope=all
+  const { page, limit, startDate, endDate, search, type, scope } = c.req.query();
 
   // Ambil payday user agar default filter siklus benar
   const user = await budgetRepository.findUserById(userId);
@@ -172,11 +194,13 @@ export const getTransactionsController = async (c: Context) => {
     search,
     type: type as any,
     payday,
+    scope: scope as any,
   });
 
   if (!result.success) c.status(result.status as any);
   return c.json(result);
 };
+
 
 // === GET Detail Transaction (:id) ===
 export const getTransactionDetailController = async (c: Context) => {
@@ -194,6 +218,23 @@ export const updateTransactionController = async (c: Context) => {
   const userId = c.get("userId");
   const transactionId = c.req.param("id");
   const body = await c.req.json(); // Ambil data update dari body
+
+  // 🔒 GRACE PERIOD VALIDATION: Cek tanggal transaksi yang akan diperbarui
+  if (body.date) {
+    const txDate = new Date(body.date);
+    const now = new Date();
+    const cutoffDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    if (txDate < cutoffDate) {
+      const closedPeriod = txDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+      const gracePeriod = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+        .toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+      return c.json({
+        success: false,
+        code: "TRANSACTION_CLOSED_PERIOD",
+        message: `Periode ${closedPeriod} sudah Tutup Buku Permanen. Perubahan transaksi hanya diperbolehkan sampai 1 bulan ke belakang (${gracePeriod}).`,
+      }, 422);
+    }
+  }
 
   const result = await updateTransactionUseCase(transactionId, userId, body);
 

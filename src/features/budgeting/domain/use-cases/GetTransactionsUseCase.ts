@@ -10,6 +10,7 @@ interface GetTransactionsInput {
   search?: string;
   type?: "INCOME" | "EXPENSE" | "ALL";
   payday?: number;     // Dari profil user, diteruskan oleh controller
+  scope?: "cycle" | "all"; // "cycle" = siklus aktif, "all" = semua transaksi
 }
 
 export const getTransactionsUseCase = async (input: GetTransactionsInput) => {
@@ -25,7 +26,11 @@ export const getTransactionsUseCase = async (input: GetTransactionsInput) => {
     let cycleLabel: string | undefined;
     let dateRangeLabel: string | undefined;
 
-    if (input.startDate && input.endDate) {
+    if (input.scope === "all") {
+      // Mode All Time: tidak ada filter tanggal → semua 514+ transaksi
+      filterStartDate = undefined;
+      filterEndDate = undefined;
+    } else if (input.startDate && input.endDate) {
       // Frontend mengirimkan filter tanggal eksplisit (misal: filter bulan tertentu di halaman Rekap)
       filterStartDate = new Date(`${input.startDate}T00:00:00Z`);
       filterEndDate = new Date(`${input.endDate}T23:59:59.999Z`);
