@@ -45,7 +45,7 @@ export const groqService = {
                     messages: baseMessages,
                     model: modelName,
                     temperature: 0.7,
-                    max_tokens: 300,
+                    max_tokens: 1024, // Reasoning models butuh token lebih untuk blok <think>
                     stream: false,
                 });
                 usedModel = modelName;
@@ -66,7 +66,14 @@ export const groqService = {
             logger.error({ message: "[GroqService] ❌ Semua model AI gagal digunakan." });
             return "Maaf, layanan AI sedang sibuk. Coba lagi nanti.";
         }
-        const responseContent = completion.choices[0]?.message?.content || "Maaf, saya sedang pusing.";
+        const rawContent = completion.choices[0]?.message?.content || "";
+        // Strip blok <think>...</think> dari model reasoning (Qwen, DeepSeek, dll).
+        // Kasus 1: Tag lengkap <think>...</think>
+        // Kasus 2: Tag terpotong karena token limit — buang semua setelah <think> yang tidak tertutup
+        const responseContent = rawContent
+            .replace(/<think>[\s\S]*?<\/think>/g, "")
+            .replace(/<think>[\s\S]*/g, "")
+            .trim() || "Maaf, saya sedang pusing.";
         logger.debug({
             message: "[GroqService] Received response from Groq AI",
             response: responseContent,
