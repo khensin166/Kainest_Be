@@ -151,4 +151,20 @@ app.get('/doc', (c) => {
   }
 });
 
+// Global Error Handler untuk Mencegah Kebocoran Stack Trace
+app.onError((err, c) => {
+  console.error(`[GlobalError] ${err.message}`, err.stack);
+  
+  // Dalam production, sembunyikan stack trace
+  const isProd = process.env.NODE_ENV === 'production';
+  return c.json(
+    {
+      success: false,
+      message: isProd ? "Internal Server Error" : err.message,
+      ...(isProd ? {} : { stack: err.stack }), // Hanya tampilkan stack di dev
+    },
+    500
+  );
+});
+
 export default app
