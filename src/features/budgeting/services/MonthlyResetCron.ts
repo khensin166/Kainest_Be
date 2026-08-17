@@ -140,7 +140,7 @@ async function generateAiInsight(summary: {
   totalExpense: number;
   surplus: number;
   periodLabel: string;
-}): Promise<string> {
+}, userId: string): Promise<string> {
   const systemPrompt = `Kamu adalah Kenin, asisten keuangan pribadi yang bersahabat dan bijak. 
 Tugas kamu: Berikan ringkasan singkat (maksimal 3 kalimat) dan saran finansial yang actionable 
 berdasarkan data keuangan pengguna bulan lalu. 
@@ -155,7 +155,10 @@ JANGAN menyebut nama bulan dalam kalimat karena sudah ada di header pesan.`;
   });
 
   try {
-    const insight = await groqService.generateResponse(systemPrompt, userContext);
+    const insight = await groqService.generateResponse(systemPrompt, userContext, {
+      userId,
+      feature: "monthly_reset_insight",
+    });
     return insight;
   } catch {
     return "Pertahankan kebiasaan baikmu! Konsistensi adalah kunci menuju keuangan yang sehat. 💪";
@@ -174,7 +177,7 @@ export async function processUserReset(user: {
 
   const payday = user.payday ?? 31;
   const summary = await calculateCycleSummary(user.id, payday);
-  const aiInsight = await generateAiInsight(summary);
+  const aiInsight = await generateAiInsight(summary, user.id);
 
   // Susun pesan blast
   const surplusLine =

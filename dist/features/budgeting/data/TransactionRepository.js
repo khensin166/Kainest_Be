@@ -98,7 +98,7 @@ export const transactionRepository = {
                 where: whereClause,
                 skip: skip, // Loncat sekian data (offset)
                 take: take, // Ambil sekian data (limit)
-                orderBy: { createdAt: "desc" }, // Murni urut berdasarkan waktu input ke sistem
+                orderBy: { date: "desc" }, // Urut berdasarkan tanggal transaksi terjadi
                 // Include data kategori agar di UI bisa tampil ikon dan namanya
                 include: {
                     category: {

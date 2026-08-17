@@ -46,7 +46,8 @@ export const getAiAdvisorUseCase = async (
   // 4. Panggil Groq
   const aiAdvice = await groqService.generateResponse(
     BUDGET_ADVISOR_SYSTEM_PROMPT,
-    contextJson
+    contextJson,
+    { userId, feature: "daily_ai_advisor" }
   );
 
   // 5. Simpan Saran ke Database (Untuk History)

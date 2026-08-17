@@ -90,7 +90,7 @@ export const evaluateMonthlyBudgetUseCase = async (userId) => {
         console.log("🤖 [DEBUG] PROMPT DATA KE GROQ:");
         console.log(contextJson);
         console.log("========================================");
-        const aiMessage = await groqService.generateResponse(MONTHLY_EVALUATION_SYSTEM_PROMPT, contextJson);
+        const aiMessage = await groqService.generateResponse(MONTHLY_EVALUATION_SYSTEM_PROMPT, contextJson, { userId, feature: "monthly_budget_evaluation" });
         // 5. Simpan Saran ke Database
         // Simpan JSON lengkap agar Frontend bisa menampilkan tombol "Approve" per item
         await prisma.aISuggestion.create({

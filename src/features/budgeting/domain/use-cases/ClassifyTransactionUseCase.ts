@@ -98,7 +98,8 @@ Balas HANYA dengan JSON: { "categoryId": "<id>", "type": "INCOME" | "EXPENSE", "
     // 8. Kirim ke Grok/LLM
     const response = await groqService.generateResponse(
       CLASSIFY_SYSTEM_PROMPT,
-      userContext
+      userContext,
+      { userId, feature: "bot_transaction_classification" }
     );
 
     // 9. Parse respons JSON dari LLM
