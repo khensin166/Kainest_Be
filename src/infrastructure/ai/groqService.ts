@@ -10,13 +10,16 @@ const groq = new Groq({
 /**
  * Daftar model prioritas fallback.
  * Sistem mencoba model pertama, jika gagal otomatis mencoba model berikutnya.
- * Prioritas: qwen (limit terbesar) → gpt-oss-120b → gpt-oss-20b → gpt-oss-safeguard-20b
+ *
+ * CATATAN: qwen/qwen3.6-27b adalah reasoning model (selalu output <think> dulu).
+ * Untuk task yang butuh strict JSON output (klasifikasi), gunakan non-reasoning model dulu.
+ * Prioritas: gpt-oss-120b → gpt-oss-20b → gpt-oss-safeguard-20b → qwen (last resort)
  */
 const FALLBACK_MODELS = [
-  "qwen/qwen3.6-27b",
   "openai/gpt-oss-120b",
   "openai/gpt-oss-20b",
   "openai/gpt-oss-safeguard-20b",
+  "qwen/qwen3.6-27b",        // Last resort: reasoning model, kurang reliable untuk JSON
 ];
 
 export const groqService = {
