@@ -112,10 +112,12 @@ Balas HANYA dengan JSON: { "categoryId": "<id>", "type": "INCOME" | "EXPENSE", "
       .replace(/```\n?/g, "")
       .trim();
 
-    // Pastikan hanya mengambil bagian objek JSON jika ada teks ekstra
     const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       cleanResponse = jsonMatch[0];
+    } else {
+      // Tidak ada JSON sama sekali (kemungkinan error dari groqService)
+      throw new Error(response); // lemparkan respons asli (misal: "Maaf, saya sedang pusing.")
     }
 
     const parsed = JSON.parse(cleanResponse);
@@ -151,11 +153,15 @@ Balas HANYA dengan JSON: { "categoryId": "<id>", "type": "INCOME" | "EXPENSE", "
       amount: parsed.amount || 0,
       note: parsed.note || text,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("ClassifyTransactionUseCase Error:", error);
+    
+    // Jika error memiliki pesan custom (seperti "Maaf, saya sedang pusing.")
+    const errorMessage = error instanceof Error ? error.message : "Gagal mengklasifikasikan transaksi.";
+    
     return {
       success: false,
-      message: "Gagal mengklasifikasikan transaksi.",
+      message: errorMessage,
     };
   }
 };
