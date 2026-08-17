@@ -78,7 +78,19 @@ app.get('/auth/social-callback', async (c) => {
   }
 });
 
-app.on(["POST", "GET"], "/auth/*", (c) => auth.handler(c.req.raw))
+import { rateLimiter } from 'hono-rate-limiter';
+
+// Auth Rate Limiter (20 requests per minute for login/auth endpoints)
+const authRateLimiter = rateLimiter({
+  windowMs: 60 * 1000, 
+  limit: 20, 
+  standardHeaders: "draft-6",
+  keyGenerator: (c) => {
+    return c.req.header('x-forwarded-for') || (c.env as any)?.REMOTE_ADDR || "anonymous";
+  }
+});
+
+app.on(["POST", "GET"], "/auth/*", authRateLimiter, (c) => auth.handler(c.req.raw))
 app.route('/profile', profileRoute)
 app.route('/couple', coupleRoute)
 app.route('/todos', todoRoute)
