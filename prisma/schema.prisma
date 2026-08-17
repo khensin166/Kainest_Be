@@ -95,6 +95,9 @@ model User {
   // Relasi ke Split Bill Session
   splitBills  SplitBillSession[]
 
+  // Relasi ke Log Penggunaan AI
+  apiUsageLogs ApiUsageLog[]
+
   @@schema("kainest")
 }
 
@@ -495,5 +498,27 @@ model SplitBillSession {
   
   @@index([userId])
   @@index([userId, createdAt(sort: Desc)]) // Riwayat split bill user terbaru
+  @@schema("kainest")
+}
+
+// ==========================================
+// 🤖 AI USAGE TRACKING
+// ==========================================
+
+model ApiUsageLog {
+  id               String   @id @default(uuid())
+  userId           String?  // Null jika request tidak berhasil dikaitkan ke user
+  feature          String   // Misal: "bot_transaction", "ai_suggestion"
+  modelUsed        String   // Misal: "qwen/qwen3.6-27b", "openai/gpt-oss-120b"
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  totalTokens      Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([userId, createdAt(sort: Desc)])
   @@schema("kainest")
 }

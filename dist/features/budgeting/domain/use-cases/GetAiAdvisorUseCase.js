@@ -30,7 +30,7 @@ export const getAiAdvisorUseCase = async (userId, categoryId) => {
     console.log(contextJson);
     console.log("==========================================");
     // 4. Panggil Groq
-    const aiAdvice = await groqService.generateResponse(BUDGET_ADVISOR_SYSTEM_PROMPT, contextJson);
+    const aiAdvice = await groqService.generateResponse(BUDGET_ADVISOR_SYSTEM_PROMPT, contextJson, { userId, feature: "daily_ai_advisor" });
     // 5. Simpan Saran ke Database (Untuk History)
     await prisma.aISuggestion.create({
         data: {

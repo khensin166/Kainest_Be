@@ -115,7 +115,8 @@ export const evaluateMonthlyBudgetUseCase = async (userId: string) => {
 
     const aiMessage = await groqService.generateResponse(
       MONTHLY_EVALUATION_SYSTEM_PROMPT,
-      contextJson
+      contextJson,
+      { userId, feature: "monthly_budget_evaluation" }
     );
 
     // 5. Simpan Saran ke Database

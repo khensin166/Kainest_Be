@@ -11,7 +11,12 @@ export const getTransactionsUseCase = async (input) => {
         let filterEndDate;
         let cycleLabel;
         let dateRangeLabel;
-        if (input.startDate && input.endDate) {
+        if (input.scope === "all") {
+            // Mode All Time: tidak ada filter tanggal → semua 514+ transaksi
+            filterStartDate = undefined;
+            filterEndDate = undefined;
+        }
+        else if (input.startDate && input.endDate) {
             // Frontend mengirimkan filter tanggal eksplisit (misal: filter bulan tertentu di halaman Rekap)
             filterStartDate = new Date(`${input.startDate}T00:00:00Z`);
             filterEndDate = new Date(`${input.endDate}T23:59:59.999Z`);

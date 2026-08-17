@@ -9,7 +9,7 @@ const GOWA_DEVICE_ID = process.env.WA_BOT_DEVICE_ID || process.env.GOWA_DEVICE_I
 /**
  * Helper: Kirim pesan teks ke grup via GOWA
  */
-async function sendGroupMessageViaGowa(groupId, message) {
+export async function sendGroupMessageViaGowa(groupId, message) {
     const url = `${GOWA_BASE_URL}/send/message`;
     const resp = await fetch(url, {
         method: "POST",

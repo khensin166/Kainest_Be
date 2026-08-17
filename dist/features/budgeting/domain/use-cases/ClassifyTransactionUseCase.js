@@ -67,7 +67,7 @@ Kategori fallback (gunakan jika tidak ada yang cocok):
 Balas HANYA dengan JSON: { "categoryId": "<id>", "type": "INCOME" | "EXPENSE", "amount": <number>, "note": "<deskripsi singkat>" }
 `;
         // 8. Kirim ke Grok/LLM
-        const response = await groqService.generateResponse(CLASSIFY_SYSTEM_PROMPT, userContext);
+        const response = await groqService.generateResponse(CLASSIFY_SYSTEM_PROMPT, userContext, { userId, feature: "bot_transaction_classification" });
         // 9. Parse respons JSON dari LLM
         const cleanResponse = response
             .replace(/```json\n?/g, "")

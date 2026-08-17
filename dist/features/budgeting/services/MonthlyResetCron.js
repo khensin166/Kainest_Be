@@ -112,7 +112,7 @@ async function calculateCycleSummary(userId, payday) {
     return { salary, totalExpense, totalIncome, surplus, pocketsDetail, periodLabel };
 }
 // ── Core: Generate AI insight untuk ringkasan ───────────────────────────────
-async function generateAiInsight(summary) {
+async function generateAiInsight(summary, userId) {
     const systemPrompt = `Kamu adalah Kenin, asisten keuangan pribadi yang bersahabat dan bijak. 
 Tugas kamu: Berikan ringkasan singkat (maksimal 3 kalimat) dan saran finansial yang actionable 
 berdasarkan data keuangan pengguna bulan lalu. 
@@ -125,7 +125,10 @@ JANGAN menyebut nama bulan dalam kalimat karena sudah ada di header pesan.`;
         rasio_pengeluaran: summary.salary > 0 ? `${Math.round((summary.totalExpense / summary.salary) * 100)}%` : "N/A",
     });
     try {
-        const insight = await groqService.generateResponse(systemPrompt, userContext);
+        const insight = await groqService.generateResponse(systemPrompt, userContext, {
+            userId,
+            feature: "monthly_reset_insight",
+        });
         return insight;
     }
     catch {
@@ -137,7 +140,7 @@ export async function processUserReset(user) {
     logger.info(`[MonthlyReset] Memproses reset untuk user: ${user.name || user.id}`);
     const payday = user.payday ?? 31;
     const summary = await calculateCycleSummary(user.id, payday);
-    const aiInsight = await generateAiInsight(summary);
+    const aiInsight = await generateAiInsight(summary, user.id);
     // Susun pesan blast
     const surplusLine = summary.surplus > 0
         ? `💰 *Sisa Saldo:* ${formatIDR(summary.surplus)} ✨\n\n_(Ketik *!keep* jika mau sisa ini ditambahkan ke bulan depan)_`
