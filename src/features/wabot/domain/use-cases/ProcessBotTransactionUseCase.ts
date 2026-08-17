@@ -62,7 +62,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
   let cleanSender = rawSender.replace("@s.whatsapp.net", "").replace("@c.us", "").replace("@lid", "");
 
   // 3. Intercept Perintah !link (prioritas utama, tanpa perlu cek user/grup)
-  if (lowerText.startsWith("!link ")) {
+  if (lowerText === "!link" || lowerText.startsWith("!link ")) {
     const code = textMsg.split(" ")[1];
     if (!code) {
       return { success: false, status: 400, message: `Format salah. Gunakan: !link KODE_UNIK_KAMU${HELP_FOOTER_CONST}`, replyText: true };
