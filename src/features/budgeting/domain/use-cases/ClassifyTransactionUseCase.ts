@@ -103,10 +103,20 @@ Balas HANYA dengan JSON: { "categoryId": "<id>", "type": "INCOME" | "EXPENSE", "
     );
 
     // 9. Parse respons JSON dari LLM
-    const cleanResponse = response
-      .replace(/```json\n?/g, "")
+    // Hapus blok <think>...</think> dari model reasoning (seperti Qwen/DeepSeek)
+    let cleanResponse = response.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    
+    // Hapus format markdown
+    cleanResponse = cleanResponse
+      .replace(/```json\n?/gi, "")
       .replace(/```\n?/g, "")
       .trim();
+
+    // Pastikan hanya mengambil bagian objek JSON jika ada teks ekstra
+    const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanResponse = jsonMatch[0];
+    }
 
     const parsed = JSON.parse(cleanResponse);
 

@@ -69,10 +69,18 @@ Balas HANYA dengan JSON: { "categoryId": "<id>", "type": "INCOME" | "EXPENSE", "
         // 8. Kirim ke Grok/LLM
         const response = await groqService.generateResponse(CLASSIFY_SYSTEM_PROMPT, userContext, { userId, feature: "bot_transaction_classification" });
         // 9. Parse respons JSON dari LLM
-        const cleanResponse = response
-            .replace(/```json\n?/g, "")
+        // Hapus blok <think>...</think> dari model reasoning (seperti Qwen/DeepSeek)
+        let cleanResponse = response.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        // Hapus format markdown
+        cleanResponse = cleanResponse
+            .replace(/```json\n?/gi, "")
             .replace(/```\n?/g, "")
             .trim();
+        // Pastikan hanya mengambil bagian objek JSON jika ada teks ekstra
+        const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            cleanResponse = jsonMatch[0];
+        }
         const parsed = JSON.parse(cleanResponse);
         // 10. Validasi: Pastikan categoryId ada di daftar yang valid
         const allValidIds = [
