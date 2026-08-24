@@ -311,6 +311,26 @@ docker compose up -d
 ## Update 22 Juli 2026 (Part 3: Eksplorasi OmniRoute AI)
 - **Status Eksperimen**: Berhasil namun implementasi ditunda. OmniRoute (Router Cerdas) terbukti jauh lebih superior daripada langsung menembak API Groq, dengan hasil perbandingan:
   - **Latency Internal**: OmniRoute (7ms - 15ms berkat Semantic Cache) vs Groq (~70ms+ tanpa cache).
+## Update 21 Juli 2026 (Part 2: GOWA Migration & Blast System)
+- **Frontend (WhatsApp Bot - Multi Device Hub)**:
+  - Halaman WaBotPage.vue (/app/wabot) dirombak menjadi **GOWA Device Hub**. Mendukung koneksi multi-device secara *native* dengan merender grid kartu (Staging, Production, dll).
+  - Integrasi koneksi *real-time* via **WebSocket** (ws://gowa.../ws) per device untuk menarik status (CONNECTED, UNPAIRED) dan men-generate QR base64 secara instan ketika device terputus.
+  - Store Pinia baru useGowaStore.js memanggil endpoint melalui proxy backend (menghindari CORS dan menyembunyikan kredensial GOWA).
+
+- **Frontend (WhatsApp API - Blast Dashboard)**:
+  - Halaman WaBotApiPage.vue (/app/wabot-api) dirombak menjadi **Blast Message Center**. 
+  - Mendukung seleksi banyak grup aktif via *checkbox*, filter status (Terhubung/Perlu Relink), dan 3 *template* pesan instan.
+
+- **Backend (Auto-Relink & GOWA Proxy)**:
+  - Modifikasi schema Prisma (BotActiveGroup kini merelasikan userId).
+  - Fitur **Auto-Relink**: Pada ProcessBotTransactionUseCase.ts, jika grup terdaftar belum memiliki tautan userId, sistem akan otomatis mencari JID pengirim pesan ke tabel User dan menautkannya.
+  - Penambahan Controller baru (BlastController.ts) untuk melayani *bulk message* dengan jeda 1.5 detik per pesan ke GOWA.
+  - Penambahan Controller baru (DeviceProxyController.ts) yang bertugas mem- *proxy* HTTP *requests* (GET/POST/DELETE) dari Web Admin menuju GOWA API, guna melewati limitasi **CORS browser** serta mengamankan Basic Auth credential. (Note: Koneksi Websocket wss:// dari frontend tetap terhubung langsung ke GOWA karena WS tidak diblokir CORS browser).
+  - Skema PostgreSQL public."BotActiveGroup" (View) telah di- *drop* dan dibuat ulang untuk mengekspos kolom userId.
+
+## Update 22 Juli 2026 (Part 3: Eksplorasi OmniRoute AI)
+- **Status Eksperimen**: Berhasil namun implementasi ditunda. OmniRoute (Router Cerdas) terbukti jauh lebih superior daripada langsung menembak API Groq, dengan hasil perbandingan:
+  - **Latency Internal**: OmniRoute (7ms - 15ms berkat Semantic Cache) vs Groq (~70ms+ tanpa cache).
   - **Resiliensi**: OmniRoute menggunakan parameter `"model": "auto"` sehingga kebal terhadap kasus Groq `model_decommissioned`. Model otomatis fallback/load-balance (misal dari *big-pickle* ke *deepseek-v4-flash-free*).
 - **Rencana Implementasi Mendatang**:
   1. Ubah URL endpoint LLM di `Kainest_Be/src/infrastructure/ai/groqService.ts` atau `.env` dari `api.groq.com/openai/v1` menjadi `https://kaizent-router.kenantomfie.com/v1/chat/completions`.
@@ -322,4 +342,120 @@ docker compose up -d
 - **Backend (Perbaikan Logika Payday Rollover & Cron Testing)**:
   - **Pergeseran Waktu Blast**: Logika pengecekan hari reset (isTodayResetDay) di MonthlyResetCron.ts diubah menjadi **H+1**. Kini cron memeriksa apakah "kemarin" adalah hari *payday*. Jika *payday* tanggal 31, blast akan terkirim pada tanggal 1 bulan berikutnya pukul 00:10 WIB. Ini menghindari masalah bulan belum usai saat laporan dikirimkan.
   - **Sinkronisasi Siklus**: Fungsi calculateCycleSummary kini memanggil getCycleBoundaries (sama seperti bot) untuk mencari data riwayat secara akurat. Pengambilan data riwayat dari database sekarang menggunakan cycle.prevPeriod sehingga selalu mengenai siklus yang baru saja berakhir, alih-alih melakukan *hardcode* ke tanggal 1 bulan sebelumnya.
-  - **Testing Cron di Production**: Ditambahkan perintah bot rahasia !dev-cron untuk menguji cron *Monthly Reset* di VPS (production). Perintah ini secara asinkron memanggil logika internal cron (processUserReset) secara langsung. Hanya dapat dijalankan oleh akun dengan ole: "admin". Command !dev-blast juga diperbarui agar Admin bisa menggunakannya di production tanpa perlu environment staging.
+  - **Testing Cron di Production**: Ditambahkan perintah bot rahasia !dev-cron untuk menguji cron *Monthly Reset* di VPS (production). Perintah ini secara asinkron memanggil logika internal cron (processUserReset) secara langsung. Hanya dapat dijalankan oleh akun dengan ole: "admin". Command !dev-blast juga diperbarui agar Admin bisa menggunakannya di production tanpa perlu environment staging.
+
+## Update 24 Agustus 2026 (Fitur AI Monthly Reset & 1-Click Apply)
+- **Database (Prisma Schema)**:
+  - Menyatukan dan membersihkan skema `AISuggestion`.
+  - Menambahkan kolom `period`, `proposed_pockets` (bertipe JSON), dan `applied_at` pada `kainest."AISuggestion"` untuk mendukung fitur Monthly Reset.
+  - Menjatuhkan (drop) tabel lama di skema `public` dan membuat `VIEW public."AISuggestion"` agar *backward-compatible* dengan *query* atau *service* lama yang salah membaca skema.
+- **Backend (Logika Cron & AI Reasoning)**:
+  - Mengimplementasikan 3 kategori user pada `MonthlyResetCron.ts`:
+    1. **Aktif (<= 7 hari)**: Dianalisis oleh *Reasoning AI*, hasil alokasi disimpan di DB (Saran Muncul di Web).
+    2. **Semi-Aktif (8 - 14 hari)**: Mendapat *blast* standar tanpa analisis AI (Hemat Token).
+    3. **Pasif (> 14 hari)**: Mendapat *blast* peringatan tanpa analisis AI.
+  - Memisahkan *AI Service* khusus untuk *reasoning* ke file `reasoningAiService.ts`.
+  - **Model Rotation/Fallback**: Jika model utama (`qwen/qwen3.6-27b`) limit/error atau menghasilkan JSON terpotong (*truncated*) karena *timeout*, sistem otomatis turun ke `openai/gpt-oss-120b` lalu `openai/gpt-oss-20b`.
+  - Memperbaiki bug kritis di mana *loop fallback* sebelumnya terhenti sebelum tahap *parsing*, dengan memindahkan blok `JSON.parse` ke dalam *loop* dan menaikkan batas `timeout` ke 120 detik pada instansiasi *Groq SDK*.
+  - *Regex Cleaner* untuk menghapus tag `<think>...</think>` dan mengekstrak blok JSON secara cerdas sebelum menyimpan *response* ke database.
+- **Backend (Endpoints)**:
+  - `GET /ai-suggestion`: Mengambil saran terbaru yang belum di-*apply* oleh user.
+  - `POST /ai-suggestion/apply`: Menyimpan/menimpa batas limit kantong (*Pocket*) sesuai rekomendasi JSON AI (1-Click Apply).
+- **Frontend (Banner & Store)**:
+  - Mendaftarkan *Use Cases* baru ke *Dependency Injection* (`di.js`).
+  - Menambahkan state dan fungsi ke `useBudgetStore.js` (otomatis jalan saat `onMounted`).
+  - Menampilkan `AiSuggestionBanner.vue` yang estetik (*glassmorphism*) di `BudgetDashboardPage.vue`. Banner otomatis hilang setelah tombol "Apply 1-Click" ditekan dan berhasil.
+- **Script Testing (CLI)**:
+  - Menambahkan `scripts/trigger-monthly-reset.ts` bagi *developer/admin* untuk memicu siklus reset AI tanpa perlu menunggu jam *Cron*.
+
+---
+
+## Catatan untuk Agent Selanjutnya
+1. Pastikan selalu mematuhi instruksi **Web Application Development** yang mengutamakan UI yang estetik, tidak generik, dan menggunakan animasi ringan (micro-animations).
+2. Jika ada masalah terkait rute autentikasi *Better Auth*, perhatikan versi terbarunya (khususnya perbedaan antara endpoint lama `/forget-password` dengan yang baru `/request-password-reset`).
+3. Database *Supabase* (pooler port 6543) sesekali mungkin mengalami *timeout* saat inisialisasi awal di mode *development* lokal, cukup jalankan ulang jika terjadi *error*.
+4. **Perhatian Penting**: Di sisi Backend, saat ini chat pribadi melalui Linked Devices (`@lid`) memicu error 403 ("bot belum diaktifkan di grup") karena validasi backend menganggap domain JID `@lid` memerlukan aktivasi grup. Ke depannya, validasi ini harus disesuaikan agar mengenali chat pribadi secara tepat.
+5. **Peringatan/Future Repair (Disappearing Messages di WA)**: Meskipun parameter `ephemeralExpiration` sudah diekstrak dari pesan masuk dan diteruskan ke opsi pengiriman Baileys sehingga pesan bot kini dapat terbaca dengan baik, terkadang gelembung peringatan WhatsApp *"This message won't disappear. The sender may be on an old version of WhatsApp"* masih muncul secara paralel. Investigasi lebih lanjut diperlukan (misal: memeriksa apakah format ekstraksi regex dari `JSON.stringify(msg)` ada yang kurang presisi, atau status default chat-level ephemeral di sisi client perlu diatur). Hal ini didefer untuk perbaikan di masa mendatang.
+
+
+---
+
+## Panduan Operasional Administrator
+### Cara Merilis "System Updates" & Notifikasi Blast
+Untuk menambahkan pembaruan sistem (*changelog*) agar muncul di Dashboard aplikasi, dan/atau mengirim notifikasi ke semua pengguna:
+
+1. **Buat Release di GitHub**:
+   - Buka repositori frontend/backend di GitHub.
+   - Pergi ke menu **Releases** lalu klik **Draft a new release**.
+   - Isi form (pilih/buat Tag baru seperti `v1.4.0`, masukkan judul fitur, dan tulis deskripsi rilis).
+2. **Berikan Keyword Blast (Opsional)**:
+   - Jika Anda **ingin mengirim notifikasi lonceng** ke semua pengguna terdaftar saat rilis ini disinkronisasi, tambahkan kata kunci `[BLAST]` di bagian mana saja pada deskripsi GitHub Anda.
+   - Jika *tidak ingin* mengirim notifikasi (hanya *silent update*), **jangan** cantumkan kata kunci tersebut.
+   - Klik **Publish release** di GitHub.
+3. **Sinkronisasi di Aplikasi Kainest**:
+   - Buka aplikasi Kainest dan *login* menggunakan akun yang memiliki *role* **Admin**.
+   - Masuk ke **Dashboard**.
+   - Pada panel *System Updates* (Kainest Changelog) di sebelah kanan, klik tombol ungu **"Sync GitHub"**.
+   - Server otomatis akan mem- *parsing* rilis baru, menyimpannya di database, dan menghapus teks `[BLAST]` tersebut agar tidak terlihat aneh di UI pengguna.
+   - Selesai! Pembaruan kini sudah terpampang di layar seluruh pengguna.
+
+### Cara Mengonfigurasi Docker & Staging Safe Mode di VPS
+Karena bot Staging dan Production berjalan di atas VPS yang sama dan menggunakan berkas `.env` yang sama, gunakan fitur override environment pada berkas `docker-compose.yml` VPS Anda untuk mengisolasi perilaku masing-masing instance.
+
+#### 1. Perbarui Berkas `.env` di VPS Anda
+Tambahkan/sesuaikan variabel berikut di dalam berkas `.env` global di VPS Anda:
+
+```env
+# ==========================================
+# 🤖 WA BOT ADVANCED CONFIGURATIONS (Staging Safe Mode)
+# ==========================================
+# Nomor WhatsApp Admin yang diperbolehkan di mode Staging (pisahkan dengan koma)
+STAGING_ALLOWED_NUMBERS="62812345678,62887654321"
+
+# URL Backend Terpisah
+KAINEST_API_URL_PROD="https://kainest-be.v.kenantomfie.com"
+KAINEST_API_URL_STAGING="https://staging.kainest-be.v.kenantomfie.com"
+```
+
+#### 2. Perbarui Berkas `docker-compose.yml` di VPS Anda
+Sesuaikan bagian service untuk container Production (`wa-bot`) dan Staging (`wa-bot-staging`) agar menggunakan *overrides* variabel lingkungan secara terpisah:
+
+```yaml
+version: '3.8'
+
+services:
+  # Instance Bot WhatsApp Production
+  wa-bot:
+    image: wa-bot:latest  # Sesuaikan dengan konfigurasi Anda
+    container_name: wa-bot-prod
+    restart: always
+    environment:
+      - PORT=3000
+      - BOT_ENV_MODE=production
+      - KAINEST_API_URL=${KAINEST_API_URL_PROD}
+    env_file:
+      - .env
+    # ... volume, port, dll.
+
+  # Instance Bot WhatsApp Staging
+  wa-bot-staging:
+    image: wa-bot:latest  # Sesuaikan dengan konfigurasi Anda
+    container_name: wa-bot-staging
+    restart: always
+    environment:
+      - PORT=3001  # Sesuaikan port jika diekspos
+      - BOT_ENV_MODE=staging
+      - KAINEST_API_URL=${KAINEST_API_URL_STAGING}
+      - STAGING_ALLOWED_NUMBERS=${STAGING_ALLOWED_NUMBERS}
+    env_file:
+      - .env
+    # ... volume, port, dll.
+```
+
+#### 3. Terapkan Perubahan & Restart Container
+Jalankan perintah ini di direktori server VPS Anda untuk menerapkan konfigurasi baru:
+
+```bash
+docker compose down
+docker compose up -d
+```

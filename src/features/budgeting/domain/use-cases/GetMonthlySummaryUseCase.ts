@@ -129,6 +129,7 @@ export const getMonthlySummaryUseCase = async (userId: string, payday?: number) 
       success: true,
       data: {
         salary: salary,
+        payday: effectivePayday, // 🆕 Dikirim ke frontend agar BudgetSetupModal bisa pre-fill nilai yang benar
         // Label teks bulan (untuk kompatibilitas frontend yang sudah ada)
         month: cycleLabel,
         // 🆕 Metadata siklus untuk informasi di frontend

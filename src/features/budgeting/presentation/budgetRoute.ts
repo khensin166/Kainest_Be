@@ -23,6 +23,8 @@ import {
   updateKeywordsController,
   classifyTransactionController,
   getMonthlyHistoryController,
+  getAiSuggestionController,
+  applyAiSuggestionController,
 } from "../services/budgetController.js";
 
 export const budgetRoute = new Hono();
@@ -103,3 +105,13 @@ budgetRoute.post("/classify", classifyTransactionController);
 
 // GET: Riwayat keuangan bulanan user
 budgetRoute.get("/history", getMonthlyHistoryController);
+
+// ==========================================
+// 🧠 AI SUGGESTION ROUTES
+// ==========================================
+
+// GET: Ambil saran AI budget terbaru yang belum di-apply
+budgetRoute.get("/ai-suggestion", getAiSuggestionController);
+
+// POST: 1-Click Apply — terapkan semua saran AI ke kantong
+budgetRoute.post("/ai-suggestion/apply", applyAiSuggestionController);
