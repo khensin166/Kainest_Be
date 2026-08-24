@@ -331,22 +331,6 @@ model Transaction {
   @@schema("kainest")
 }
 
-// 4. AI Suggestion Logs (Menyimpan saran Groq)
-
-model AISuggestion {
-  id              String  @id @default(uuid())
-  type            String // 'DAILY_ADVISOR' | 'MONTHLY_EVAL' | 'REBALANCE'
-  suggestion_text String  @db.Text
-  is_approved     Boolean @default(false) // User setuju dengan saran ini?
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@schema("kainest")
-}
 
 model WaBotConfig {
   id                    String   @id @default(uuid())
@@ -522,3 +506,32 @@ model ApiUsageLog {
   @@index([userId, createdAt(sort: Desc)])
   @@schema("kainest")
 }
+
+// ==========================================
+// 🧠 AI BUDGET SUGGESTION
+// ==========================================
+
+model AISuggestion {
+  id              String    @id @default(uuid())
+  userId          String
+
+  // ── Kolom LAMA (kompatibel dengan EvaluateMonthlyBudgetUseCase & GetAiAdvisorUseCase) ──
+  type            String    // "MONTHLY_EVAL" | "DAILY_ADVISOR" | "MONTHLY_RESET"
+  suggestion_text String    @db.Text // JSON string (untuk MONTHLY_EVAL) atau teks biasa (DAILY_ADVISOR)
+  is_approved     Boolean   @default(false)
+
+  // ── Kolom BARU (untuk fitur Monthly Reset & 1-Click Apply) ──
+  period          String?   // "YYYY-MM-01" — siklus yang baru selesai (hanya untuk MONTHLY_RESET)
+  proposed_pockets Json?    // Array of { categoryId, categoryName, newLimitAmount, reason }
+  applied_at      DateTime? // Kapan user meng-apply suggestion ini
+
+  createdAt       DateTime  @default(now())
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, type])
+  @@index([userId, period]) // Query suggestion terbaru per siklus payday
+  @@schema("kainest")
+}
+

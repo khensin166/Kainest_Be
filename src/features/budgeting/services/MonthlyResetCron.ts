@@ -5,7 +5,9 @@
 // - Berjalan setiap hari pukul 00:10 (tengah malam lewat 10 menit, Asia/Jakarta)
 // - Mendeteksi user yang payday-nya jatuh pada hari ini
 // - Menghitung ringkasan keuangan siklus yang baru saja berakhir
-// - Meminta Groq AI untuk menyusun analisis & saran singkat
+// - Cek aktivitas transaksi user (7-hari = aktif, 8-14 hari = semi, >14 hari = pasif)
+// - User AKTIF: panggil Reasoning AI (Qwen) untuk evaluasi & saran budget bulan depan
+// - User PASIF: tetap blast ringkasan + peringatan ramah tanpa memanggil AI
 // - Blast pesan ringkasan tersebut ke grup WA aktif user via GOWA
 //
 // ⚠️  GUARD: Hanya aktif jika ENABLE_SCHEDULER=true (HANYA set di .env VPS Production)
@@ -14,6 +16,7 @@
 import * as schedule from "node-schedule";
 import { prisma } from "../../../infrastructure/database/prisma.js";
 import { groqService } from "../../../infrastructure/ai/groqService.js";
+import { reasoningAiService } from "../../../infrastructure/ai/reasoningAiService.js";
 import { logger } from "../../../infrastructure/logger/logger.js";
 import { getCycleBoundaries } from "../../../utils/cycleBoundaries.js";
 
@@ -85,6 +88,23 @@ function isTodayResetDay(payday: number): boolean {
   return yDate === effectivePayday;
 }
 
+// ── Helper: Cek status aktivitas transaksi user ────────────────────────────────
+// Mengembalikan jumlah hari sejak transaksi terakhir.
+// null = tidak pernah ada transaksi sama sekali (dianggap pasif)
+async function getDaysSinceLastTransaction(userId: string): Promise<number | null> {
+  const lastTx = await prisma.transaction.findFirst({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+
+  if (!lastTx) return null;
+
+  const now = new Date();
+  const diffMs = now.getTime() - lastTx.createdAt.getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24)); // Konversi ms ke hari
+}
+
 // ── Core: Kalkulasi ringkasan keuangan siklus yang berakhir ─────────────────
 async function calculateCycleSummary(userId: string, payday: number): Promise<{
   salary: number;
@@ -92,6 +112,7 @@ async function calculateCycleSummary(userId: string, payday: number): Promise<{
   totalIncome: number;
   surplus: number;
   pocketsDetail: string;
+  pocketsRaw: any[];
   periodLabel: string;
 }> {
   const now = new Date();
@@ -121,8 +142,10 @@ async function calculateCycleSummary(userId: string, payday: number): Promise<{
 
   // Format ringkasan per kantong dari snapshot JSON
   let pocketsDetail = "";
+  let pocketsRaw: any[] = [];
   if (history?.pocketsSnapshot && Array.isArray(history.pocketsSnapshot)) {
-    pocketsDetail = (history.pocketsSnapshot as any[])
+    pocketsRaw = history.pocketsSnapshot as any[];
+    pocketsDetail = pocketsRaw
       .map((p: any) => {
         const pct = p.limitAmount > 0 ? Math.round((p.spent / p.limitAmount) * 100) : 0;
         const bar = pct >= 100 ? "🔴" : pct >= 75 ? "🟡" : "🟢";
@@ -131,7 +154,7 @@ async function calculateCycleSummary(userId: string, payday: number): Promise<{
       .join("\n");
   }
 
-  return { salary, totalExpense, totalIncome, surplus, pocketsDetail, periodLabel };
+  return { salary, totalExpense, totalIncome, surplus, pocketsDetail, pocketsRaw, periodLabel };
 }
 
 // ── Core: Generate AI insight untuk ringkasan ───────────────────────────────
@@ -177,9 +200,78 @@ export async function processUserReset(user: {
 
   const payday = user.payday ?? 31;
   const summary = await calculateCycleSummary(user.id, payday);
+
+  // ── Cek status aktivitas transaksi user ────────────────────────────────────
+  const daysSinceLast = await getDaysSinceLastTransaction(user.id);
+  const isActive = daysSinceLast !== null && daysSinceLast <= 7;
+  const isPassive = daysSinceLast === null || daysSinceLast > 14;
+
+  logger.info(`[MonthlyReset] Status aktivitas user ${user.id}`, {
+    daysSinceLast,
+    isActive,
+    isPassive,
+  });
+
+  // ── Bagian 1: Reasoning AI hanya untuk user AKTIF ──────────────────────────
+  let aiSuggestionNote = "";
+  if (isActive) {
+    logger.info(`[MonthlyReset] 🧠 User aktif — Memanggil Reasoning AI untuk evaluasi budget...`);
+
+    const pocketsData = Array.isArray(summary.pocketsRaw)
+      ? summary.pocketsRaw
+      : [];
+
+    const userContextJson = JSON.stringify(
+      {
+        nama_user: user.name || "Pengguna",
+        periode: summary.periodLabel,
+        total_gaji: summary.salary,
+        total_pengeluaran: summary.totalExpense,
+        sisa_surplus: summary.surplus,
+        kantong: pocketsData,
+      },
+      null,
+      2
+    );
+
+    const aiResult = await reasoningAiService.generateBudgetSuggestion(userContextJson, {
+      userId: user.id,
+      feature: "monthly_reset_reasoning",
+    });
+
+    if (aiResult) {
+      // Simpan ke database AISuggestion (kolom baru untuk MONTHLY_RESET)
+      try {
+        const cycle = getCycleBoundaries(new Date(), payday);
+        await prisma.aISuggestion.create({
+          data: {
+            userId: user.id,
+            type: "MONTHLY_RESET",
+            suggestion_text: aiResult.insight_text,
+            is_approved: false,
+            period: cycle.prevPeriod instanceof Date
+              ? cycle.prevPeriod.toISOString().split("T")[0] // "YYYY-MM-DD"
+              : String(cycle.prevPeriod),
+            proposed_pockets: aiResult.proposed_pockets as any,
+          },
+        });
+        logger.info(`[MonthlyReset] ✅ AI suggestion tersimpan ke database untuk ${user.id}`);
+        aiSuggestionNote = `\n\n✨ *Kenin sudah menyusun saran alokasi budget bulan depanmu!*\nCek Dashboard web Kainest untuk menerapkan saran tersebut hanya dengan 1-klik.`;
+      } catch (dbErr: any) {
+        logger.error("[MonthlyReset] Gagal simpan AI suggestion ke DB", { error: dbErr.message });
+      }
+    }
+  }
+
+  // ── Bagian 2: Generate insight teks standar (groqService lama, semua user) ──
   const aiInsight = await generateAiInsight(summary, user.id);
 
-  // Susun pesan blast
+  // ── Bagian 3: Tambahan pesan untuk user PASIF ──────────────────────────────
+  const passiveNote = isPassive
+    ? `\n\n_Sepertinya kamu kurang rajin mencatat pengeluaranmu akhir-akhir ini, padahal itu wajib loo 🥺 Yuk mulai catat lagi agar keuanganmu lebih sehat!_`
+    : "";
+
+  // ── Susun pesan blast ──────────────────────────────────────────────────────
   const surplusLine =
     summary.surplus > 0
       ? `💰 *Sisa Saldo:* ${formatIDR(summary.surplus)} ✨\n\n_(Ketik *!keep* jika mau sisa ini ditambahkan ke bulan depan)_`
@@ -198,11 +290,11 @@ ${surplusLine}
 ${summary.pocketsDetail || "_(Tidak ada data kantong)_"}
 
 🤖 *Kata Kenin AI:*
-${aiInsight}
+${aiInsight}${aiSuggestionNote}${passiveNote}
 ━━━━━━━━━━━━━━━━━━━━
 💡 Ketik *!help* untuk bantuan.`;
 
-  // Kirim ke semua grup aktif user
+  // ── Kirim ke semua grup aktif user ────────────────────────────────────────
   if (!user.botActiveGroups.length) {
     logger.warn(`[MonthlyReset] User ${user.id} tidak memiliki grup aktif, blast dilewati.`);
     return;
