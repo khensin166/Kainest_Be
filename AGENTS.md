@@ -80,12 +80,6 @@
 
 ## Update 2 Juli 2026
 - **Backend (Perbaikan Rollover Kantong Awal Bulan)**:
-  - Memperbaiki bug di mana kantong yang dikonfigurasi menggunakan **persentase gaji** mendapatkan `limitAmount = 0` saat sistem secara otomatis membuat rekap (*history*) bulan baru.
-  - Penyebab: Saat membuat snapshot kantong untuk bulan baru, sistem hanya membaca kolom `limitAmount` tanpa menghitung ulang nilai persentase terhadap gaji terkini.
-  - Perbaikan di `BudgetRepository.ts` → fungsi `syncMonthlyHistory`: Sekarang sistem mengecek kolom `percentage`. Jika bernilai `> 0`, maka limit dihitung ulang secara otomatis dengan formula `Math.floor((percentage / 100) * salary)`, memastikan template kantong bulan baru selalu akurat.
-
-## Update 21 Juli 2026
-- **Frontend**:
 # Kainest Project - Agent Handoff Notes
 
 ## Status Terkini (03 Juni 2026)
@@ -361,10 +355,10 @@ docker compose up -d
 - **Backend (Endpoints)**:
   - `GET /ai-suggestion`: Mengambil saran terbaru yang belum di-*apply* oleh user.
   - `POST /ai-suggestion/apply`: Menyimpan/menimpa batas limit kantong (*Pocket*) sesuai rekomendasi JSON AI (1-Click Apply).
-- **Frontend (Banner & Store)**:
-  - Mendaftarkan *Use Cases* baru ke *Dependency Injection* (`di.js`).
-  - Menambahkan state dan fungsi ke `useBudgetStore.js` (otomatis jalan saat `onMounted`).
-  - Menampilkan `AiSuggestionBanner.vue` yang estetik (*glassmorphism*) di `BudgetDashboardPage.vue`. Banner otomatis hilang setelah tombol "Apply 1-Click" ditekan dan berhasil.
+- **Frontend (Perbaikan Data & Banner)**:
+  - Memperbaiki `BudgetRepository.js` yang secara tidak sengaja membuang properti `payday` dan `cycle` dari balasan API, yang menyebabkan `payday` di Vue Store gagal tersinkronisasi.
+  - Memulihkan fungsi `getMonthlyHistory()` di `BudgetRepository.js` yang sebelumnya terhapus, mengatasi bug di mana *FinancialHistoryPage* (Rekap Bulanan) _loading_ tiada akhir.
+  - Menambahkan pemanggilan `budgetStore.fetchAiSuggestion()` pada fase `onMounted` di `BudgetDashboardPage.vue`.
 - **Script Testing (CLI)**:
   - Menambahkan `scripts/trigger-monthly-reset.ts` bagi *developer/admin* untuk memicu siklus reset AI tanpa perlu menunggu jam *Cron*.
 
@@ -376,7 +370,10 @@ docker compose up -d
 3. Database *Supabase* (pooler port 6543) sesekali mungkin mengalami *timeout* saat inisialisasi awal di mode *development* lokal, cukup jalankan ulang jika terjadi *error*.
 4. **Perhatian Penting**: Di sisi Backend, saat ini chat pribadi melalui Linked Devices (`@lid`) memicu error 403 ("bot belum diaktifkan di grup") karena validasi backend menganggap domain JID `@lid` memerlukan aktivasi grup. Ke depannya, validasi ini harus disesuaikan agar mengenali chat pribadi secara tepat.
 5. **Peringatan/Future Repair (Disappearing Messages di WA)**: Meskipun parameter `ephemeralExpiration` sudah diekstrak dari pesan masuk dan diteruskan ke opsi pengiriman Baileys sehingga pesan bot kini dapat terbaca dengan baik, terkadang gelembung peringatan WhatsApp *"This message won't disappear. The sender may be on an old version of WhatsApp"* masih muncul secara paralel. Investigasi lebih lanjut diperlukan (misal: memeriksa apakah format ekstraksi regex dari `JSON.stringify(msg)` ada yang kurang presisi, atau status default chat-level ephemeral di sisi client perlu diatur). Hal ini didefer untuk perbaikan di masa mendatang.
-
+6. **Peringatan/Future Repair (AI Suggestion Banner Tidak Muncul)**: Meskipun telah ditambahkan `fetchAiSuggestion()` di `onMounted` pada `BudgetDashboardPage.vue`, banner notifikasi AI ungu masih dilaporkan belum tampil seketika (*muncul otomatis*) saat Dashboard pertama kali dibuka melalui *hard refresh*. Investigasi lanjutan diperlukan, mungkin terkait:
+   - *State* asinkron antara `hasData` dengan pemanggilan API.
+   - Perilaku *caching* atau *lifecycle* dari Vue ketika halaman dirender ulang.
+   - Pengecekan kondisi `v-if="aiSuggestion"` di dalam komponen `AiSuggestionBanner.vue`.
 
 ---
 
