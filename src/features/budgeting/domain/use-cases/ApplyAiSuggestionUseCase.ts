@@ -133,6 +133,21 @@ export const applyAiSuggestionUseCase = async (userId: string, suggestionId: str
       },
     });
 
+    // 4.5 Tandai semua saran MONTHLY_RESET lama milik user ini yang masih pending
+    //     sebagai approved, agar banner tidak muncul kembali dari saran duplikat lama.
+    await prisma.aISuggestion.updateMany({
+      where: {
+        userId,
+        type: "MONTHLY_RESET",
+        is_approved: false,
+        id: { not: suggestionId },
+      },
+      data: {
+        is_approved: true,
+        applied_at: new Date(),
+      },
+    });
+
     const appliedCount = results.filter((r) => r.success).length;
 
     return {
