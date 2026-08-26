@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mocked } from 'vitest';
 import { TriggerMonthlyResetUseCase } from './trigger-monthly-reset.use-case.js';
 import { AdminRepository } from '../../data/admin.repository.js';
 import * as monthlyResetCron from '../../../budgeting/services/MonthlyResetCron.js';
@@ -11,10 +11,10 @@ vi.mock('../../../budgeting/services/MonthlyResetCron.js', () => ({
 
 describe('TriggerMonthlyResetUseCase', () => {
   let useCase: TriggerMonthlyResetUseCase;
-  let mockAdminRepo: vi.Mocked<AdminRepository>;
+  let mockAdminRepo: Mocked<AdminRepository>;
 
   beforeEach(() => {
-    mockAdminRepo = new AdminRepository() as vi.Mocked<AdminRepository>;
+    mockAdminRepo = new AdminRepository() as Mocked<AdminRepository>;
     useCase = new TriggerMonthlyResetUseCase(mockAdminRepo);
     vi.clearAllMocks();
   });
