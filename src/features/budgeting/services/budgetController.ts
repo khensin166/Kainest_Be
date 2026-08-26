@@ -20,6 +20,7 @@ import { classifyTransactionUseCase } from "../domain/use-cases/ClassifyTransact
 import { getMonthlyHistoryUseCase } from "../domain/use-cases/GetMonthlyHistoryUseCase.js";
 import { getAiSuggestionUseCase } from "../domain/use-cases/GetAiSuggestionUseCase.js";
 import { applyAiSuggestionUseCase } from "../domain/use-cases/ApplyAiSuggestionUseCase.js";
+import { dismissAiSuggestionUseCase } from "../domain/use-cases/DismissAiSuggestionUseCase.js";
 // === Create Transaction ===
 export const createTransactionController = async (c: Context) => {
   const userId = c.get("userId"); // Dari authMiddleware
@@ -373,3 +374,20 @@ export const applyAiSuggestionController = async (c: Context) => {
   if (!result.success) c.status((result as any).status as any);
   return c.json(result);
 };
+
+// === POST: 1-Click Abaikan Saran AI ===
+export const dismissAiSuggestionController = async (c: Context) => {
+  const userId = c.get("userId");
+  const { suggestionId } = await c.req.json();
+
+  if (!suggestionId) {
+    c.status(400);
+    return c.json({ success: false, message: "suggestionId wajib diisi" });
+  }
+
+  const result = await dismissAiSuggestionUseCase(userId, suggestionId);
+
+  if (!result.success) c.status((result as any).status as any);
+  return c.json(result);
+};
+

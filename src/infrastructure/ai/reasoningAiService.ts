@@ -39,6 +39,12 @@ Instruksi Berpikir (WAJIB):
 Gunakan blok <think>...</think> untuk menyusun strategi alokasi sebelum menjawab. Pertimbangkan:
 - Kategori mana yang overspent? Harus dinaikkan limitnya agar realistis.
 - Kategori mana yang underspent (< 70%)? Budget bisa dipotong, sisanya bisa dialihkan ke tabungan.
+- ⚠️ KRITIS — HATI-HATI DENGAN KATEGORI KEBUTUHAN PASTI/TETAP (seperti: Kos/Sewa, Tempat Tinggal, Tagihan, Listrik, Cicilan):
+  Jika pengeluarannya Rp0, JANGAN langsung pangkas limitnya! Sangat besar kemungkinan user LUPA MENCATAT TRANSAKSI, bukan berarti gratis.
+  Tindakan yang tepat:
+  1. Pertahankan limit (KEEP) atau berikan penyesuaian kecil yang wajar saja.
+  2. Di bagian "reason", tulis kalimat konfirmasi seperti ini: "Pengeluaran bulan ini tercatat Rp0. Apakah kamu lupa mencatat transaksinya? Jika memang bulan ini benar-benar tidak ada pembayaran, sisa dananya bisa kamu alihkan sendiri ke tabungan."
+  3. Jangan sertakan kantong ini di proposed_pockets jika action-nya KEEP (sesuai aturan di bawah).
 - Pastikan total proposed budget tidak melebihi total gaji.
 - Prioritaskan kebutuhan primer (makan, transportasi) sebelum tersier (hiburan, belanja).
 
@@ -118,18 +124,26 @@ export const reasoningAiService = {
         
         const rawContent = completion.choices[0]?.message?.content || "";
 
-        // Ekstrak blok JSON
+        // ✅ LANGKAH 1: Hapus TOTAL blok <think>...</think> beserta seluruh isinya.
+        // Ini wajib dilakukan SEBELUM apapun, karena Qwen sering menulis {}
+        // di dalam blok <think> yang bisa mengecoh regex JSON kita.
+        const cleanedContent = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
+        // LANGKAH 2: Ekstrak JSON dari konten yang sudah bersih.
         let jsonString = "";
-        const jsonBlockMatch = rawContent.match(/```(?:json)?\s*([\s\S]*?)```/);
-        
+        const jsonBlockMatch = cleanedContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+
         if (jsonBlockMatch) {
+          // Model membungkus respons dengan ```json ... ```
           jsonString = jsonBlockMatch[1].trim();
         } else {
-          const objectMatch = rawContent.match(/(\{[\s\S]*\})/);
+          // Fallback: cari objek JSON murni menggunakan {}
+          const objectMatch = cleanedContent.match(/(\{[\s\S]*\})/);
           if (objectMatch) {
             jsonString = objectMatch[1].trim();
           } else {
-            jsonString = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+            // Last resort: anggap seluruh konten adalah JSON
+            jsonString = cleanedContent;
           }
         }
 

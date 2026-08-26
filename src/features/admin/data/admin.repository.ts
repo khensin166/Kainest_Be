@@ -44,4 +44,28 @@ export class AdminRepository {
       }
     });
   }
+
+  /**
+   * Mengambil data lengkap user yang dibutuhkan untuk proses reset bulanan
+   */
+  async getUserForReset(userId: string) {
+    return prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        payday: true,
+        waBotConfig: {
+          select: {
+            baseUrl: true,
+          }
+        },
+        botActiveGroups: {
+          select: {
+            groupId: true,
+          }
+        }
+      }
+    });
+  }
 }
