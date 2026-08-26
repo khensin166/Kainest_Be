@@ -25,6 +25,7 @@ import {
   getMonthlyHistoryController,
   getAiSuggestionController,
   applyAiSuggestionController,
+  dismissAiSuggestionController,
 } from "../services/budgetController.js";
 
 export const budgetRoute = new Hono();
@@ -115,3 +116,6 @@ budgetRoute.get("/ai-suggestion", getAiSuggestionController);
 
 // POST: 1-Click Apply — terapkan semua saran AI ke kantong
 budgetRoute.post("/ai-suggestion/apply", applyAiSuggestionController);
+
+// POST: Tolak/Abaikan saran AI
+budgetRoute.post("/ai-suggestion/dismiss", dismissAiSuggestionController);
