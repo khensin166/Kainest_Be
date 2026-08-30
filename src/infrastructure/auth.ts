@@ -37,6 +37,16 @@ export const auth = betterAuth({
         required: false,
         fieldName: "phone_number",
       },
+      userGroupId: {
+        type: "string",
+        required: false,
+        fieldName: "user_group_id",
+      },
+      permissions: {
+        type: "string[]",
+        required: false,
+        fieldName: "permissions",
+      },
     },
   },
   account: {

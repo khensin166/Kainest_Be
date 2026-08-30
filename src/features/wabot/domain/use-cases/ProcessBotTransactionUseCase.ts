@@ -118,6 +118,8 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
       };
     }
 
+    const userPermissions = (cmdUser as any).userGroup?.permissions || (cmdUser as any).permissions || [];
+
     const now = new Date();
     const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
     const weekStart = new Date(now); weekStart.setDate(now.getDate() - 6); weekStart.setHours(0, 0, 0, 0);
@@ -151,6 +153,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
 
     // === !tagihan ===
     if (lowerText === "!tagihan") {
+      if (!userPermissions.includes("plan")) return { success: true, replyText: true, data: { message: `🚫 Kamu tidak memiliki akses ke fitur Tagihan (Plan).${HELP_FOOTER}` } };
       const bills = await getActiveBills(cmdUser.id);
       if (!bills.length) return { success: true, replyText: true, data: { message: `✅ Tidak ada tagihan aktif untuk bulan ini.${HELP_FOOTER}` } };
 
@@ -173,6 +176,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
 
     // === !tabungan ===
     if (lowerText === "!tabungan") {
+      if (!userPermissions.includes("plan")) return { success: true, replyText: true, data: { message: `🚫 Kamu tidak memiliki akses ke fitur Tabungan (Plan).${HELP_FOOTER}` } };
       const savings = await getActiveSavings(cmdUser.id);
       if (!savings.length) return { success: true, replyText: true, data: { message: `🎯 Belum ada target tabungan yang aktif.${HELP_FOOTER}` } };
 
@@ -189,6 +193,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
 
     // === !bayar <kode> ===
     if (lowerText.startsWith("!bayar ")) {
+      if (!userPermissions.includes("plan")) return { success: true, replyText: true, data: { message: `🚫 Kamu tidak memiliki akses ke fitur Tagihan (Plan).${HELP_FOOTER}` } };
       const kode = lowerText.split(" ")[1]?.toUpperCase();
       if (!kode || !kode.startsWith("T")) return { success: true, replyText: true, data: { message: `❌ Format salah. Gunakan: *!bayar <kode>*\nContoh: *!bayar T1*${HELP_FOOTER}` } };
       
@@ -241,6 +246,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
 
     // === !lewat <kode> ===
     if (lowerText.startsWith("!lewat ")) {
+      if (!userPermissions.includes("plan")) return { success: true, replyText: true, data: { message: `🚫 Kamu tidak memiliki akses ke fitur Tagihan (Plan).${HELP_FOOTER}` } };
       const kode = lowerText.split(" ")[1]?.toUpperCase();
       if (!kode || !kode.startsWith("T")) return { success: true, replyText: true, data: { message: `❌ Format salah. Gunakan: *!lewat <kode>*\nContoh: *!lewat T1*${HELP_FOOTER}` } };
       
@@ -276,6 +282,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
 
     // === !nabung <nominal> <kode> ===
     if (lowerText.startsWith("!nabung ")) {
+      if (!userPermissions.includes("plan")) return { success: true, replyText: true, data: { message: `🚫 Kamu tidak memiliki akses ke fitur Tabungan (Plan).${HELP_FOOTER}` } };
       const parts = lowerText.split(" ");
       const nominalStr = parts[1];
       const kode = parts[2]?.toUpperCase();
@@ -600,6 +607,15 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
           `!dev-cron   — Trigger cron bulanan sekarang juga\n` +
           `!dev-blast  — Simulasi blast laporan akhir siklus`
         : "";
+      const planSection = userPermissions.includes("plan")
+        ? `\n\n💸 *Tagihan & Tabungan*\n` +
+          `!tagihan — Daftar tagihan aktif bulan ini\n` +
+          `!bayar <kode> — Lunasi tagihan (Cth: !bayar T1)\n` +
+          `!lewat <kode> — Lewati tagihan bulan ini (Cth: !lewat T2)\n` +
+          `!tabungan — Daftar target tabungan\n` +
+          `!nabung <nom> <kode> — Setor tabungan (Cth: !nabung 50000 S1)`
+        : "";
+
       return {
         success: true, replyText: true,
         data: {
@@ -617,13 +633,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
             `!undo Y  — Hapus transaksi terakhir (setelah konfirmasi)\n` +
             `!link KODE — Hubungkan akun & aktifkan grup\n` +
             `!web     — Dapatkan tautan website Kainest` +
-            adminSection + `\n\n` +
-            `💸 *Tagihan & Tabungan*\n` +
-            `!tagihan — Daftar tagihan aktif bulan ini\n` +
-            `!bayar <kode> — Lunasi tagihan (Cth: !bayar T1)\n` +
-            `!lewat <kode> — Lewati tagihan bulan ini (Cth: !lewat T2)\n` +
-            `!tabungan — Daftar target tabungan\n` +
-            `!nabung <nom> <kode> — Setor tabungan (Cth: !nabung 50000 S1)\n\n` +
+            adminSection + planSection + `\n\n` +
             `💬 *Mencatat Transaksi*\n` +
             `Cukup ketik transaksimu secara natural, contoh:\n` +
             `_Makan siang 25k_ atau _Gajian 3.5jt_`
