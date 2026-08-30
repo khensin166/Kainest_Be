@@ -22,6 +22,9 @@ export const botTransactionRepository = {
           { phone_number: phoneNumber }
         ]
       },
+      include: {
+        userGroup: true
+      }
     });
 
     if (!user) {
@@ -36,6 +39,9 @@ export const botTransactionRepository = {
             endsWith: phoneTail,
           },
         },
+        include: {
+          userGroup: true
+        }
       });
     }
 

@@ -1,6 +1,7 @@
 import { transactionRepository } from "../../data/TransactionRepository.js";
 import { budgetRepository } from "../../data/BudgetRepository.js";
 import { TransactionType } from "@prisma/client";
+import { checkSolvencyAlert } from "./CheckSolvencyUseCase.js";
 
 type InputData = {
   userId: string;
@@ -32,6 +33,12 @@ export const createTransactionUseCase = async (data: InputData) => {
 
     // Write-Time Sync untuk riwayat bulanan
     await budgetRepository.syncMonthlyHistory(data.userId, txDate);
+
+    // Cek Solvabilitas jika tipe transaksi adalah PENGELUARAN
+    if (newTx.type === "EXPENSE") {
+      // Jalankan asinkronus agar tidak memblokir response
+      checkSolvencyAlert(data.userId).catch(err => console.error("Solvency Alert Error:", err));
+    }
 
     return { success: true, data: newTx };
   } catch (error) {

@@ -19,11 +19,9 @@ import { groqService } from "../../../infrastructure/ai/groqService.js";
 import { reasoningAiService } from "../../../infrastructure/ai/reasoningAiService.js";
 import { logger } from "../../../infrastructure/logger/logger.js";
 import { getCycleBoundaries } from "../../../utils/cycleBoundaries.js";
+import { sendTextViaGowa } from "../../../utils/gowaService.js";
 
 // ── Env config ───────────────────────────────────────────────────────────────
-const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
-const GOWA_API_KEY = process.env.WA_BOT_API_KEY || process.env.GOWA_API_KEY || "";
-const GOWA_DEVICE_ID = process.env.WA_BOT_DEVICE_ID || process.env.GOWA_DEVICE_ID || "";
 const ENABLE_SCHEDULER = process.env.ENABLE_SCHEDULER === "true";
 
 // ── Helper: Format mata uang Indonesia ───────────────────────────────────────
@@ -41,29 +39,6 @@ function formatMonthIndonesian(date: Date): string {
     "Juli", "Agustus", "September", "Oktober", "November", "Desember",
   ];
   return `${months[date.getMonth()]} ${date.getFullYear()}`;
-}
-
-// ── Helper: Kirim pesan teks via GOWA ────────────────────────────────────────
-async function sendTextViaGowa(phone: string, message: string): Promise<void> {
-  const url = `${GOWA_BASE_URL}/send/message`;
-  try {
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Device-Id": GOWA_DEVICE_ID,
-        ...(GOWA_API_KEY ? { Authorization: `Basic ${GOWA_API_KEY}` } : {}),
-      },
-      body: JSON.stringify({ phone, message }),
-    });
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(`GOWA send failed [${resp.status}]: ${text}`);
-    }
-    logger.info("[MonthlyReset] Blast pesan terkirim", { phone });
-  } catch (err: any) {
-    logger.error("[MonthlyReset] Gagal kirim blast via GOWA", { phone, error: err.message });
-  }
 }
 
 // ── Helper: Dapatkan hari terakhir di bulan tertentu ─────────────────────────
@@ -271,6 +246,47 @@ export async function processUserReset(user: {
     ? `\n\n_Sepertinya kamu kurang rajin mencatat pengeluaranmu akhir-akhir ini, padahal itu wajib loo 🥺 Yuk mulai catat lagi agar keuanganmu lebih sehat!_`
     : "";
 
+  // ── Bagian 4: Setoran Tabungan Otomatis ────────────────────────────────────
+  let autoSavingNote = "";
+  const activeSavings = await prisma.savingGoal.findMany({
+    where: { userId: user.id, status: "ACTIVE", monthlyAllocation: { gt: 0 } }
+  });
+
+  if (activeSavings.length > 0) {
+    if (summary.surplus < 0) {
+      autoSavingNote = `\n\n⚠️ *Setoran Otomatis Dibatalkan*\nKarena bulan lalu kamu overbudget (sisa uang minus), sistem menunda setoran tabungan otomatis bulan ini agar *cashflow* kamu tetap aman.`;
+    } else {
+      let savedTotal = 0;
+      const cycle = getCycleBoundaries(new Date(), payday);
+      
+      for (const saving of activeSavings) {
+        // Cek apakah sudah pernah disetor otomatis di periode INI
+        const existingAuto = await prisma.savingContribution.findFirst({
+          where: { goalId: saving.id, period: cycle.period, source: "AUTO_CYCLE" }
+        });
+        
+        if (!existingAuto) {
+          await prisma.savingContribution.create({
+            data: {
+              goalId: saving.id,
+              userId: user.id,
+              amount: saving.monthlyAllocation,
+              source: "AUTO_CYCLE",
+              note: "Setoran Otomatis Awal Siklus",
+              date: new Date(),
+              period: cycle.period,
+            }
+          });
+          savedTotal += saving.monthlyAllocation;
+        }
+      }
+      
+      if (savedTotal > 0) {
+        autoSavingNote = `\n\n🎯 *Setoran Tabungan Otomatis Berhasil!*\nSistem telah menyisihkan ${formatIDR(savedTotal)} ke target tabunganmu.`;
+      }
+    }
+  }
+
   // ── Susun pesan blast ──────────────────────────────────────────────────────
   const surplusLine =
     summary.surplus > 0
@@ -290,7 +306,7 @@ ${surplusLine}
 ${summary.pocketsDetail || "_(Tidak ada data kantong)_"}
 
 🤖 *Kata Kenin AI:*
-${aiInsight}${aiSuggestionNote}${passiveNote}
+${aiInsight}${aiSuggestionNote}${passiveNote}${autoSavingNote}
 ━━━━━━━━━━━━━━━━━━━━
 💡 Ketik *!help* untuk bantuan.`;
 

@@ -1,6 +1,7 @@
 // BulkSetupPocketsUseCase.ts
 import { pocketRepository } from "../../data/PocketRepository.js";
 import { budgetRepository } from "../../data/BudgetRepository.js";
+import { getCycleBoundaries } from "../../../../utils/cycleBoundaries.js";
 
 type PocketInput = {
   categoryId: string;
@@ -73,9 +74,9 @@ export const bulkSetupPocketsUseCase = async (data: BulkSetupData) => {
     // Ambil detail kategori untuk nama & icon di snapshot
     const categories = await budgetRepository.findAllCategories(userId);
 
-    // Sinkronisasi limit ke Monthly Financial History (untuk bulan berjalan)
+    // Sinkronisasi limit ke Monthly Financial History (untuk siklus aktif berdasarkan payday)
     const now = new Date();
-    const period = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const { period } = getCycleBoundaries(now, user?.payday ?? 31);
 
     let totalBudgeted = 0;
 

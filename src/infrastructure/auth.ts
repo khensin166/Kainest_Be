@@ -37,6 +37,16 @@ export const auth = betterAuth({
         required: false,
         fieldName: "phone_number",
       },
+      userGroupId: {
+        type: "string",
+        required: false,
+        fieldName: "userGroupId",
+      },
+      permissions: {
+        type: "string[]",
+        required: false,
+        fieldName: "permissions",
+      },
     },
   },
   account: {
@@ -73,6 +83,28 @@ export const auth = betterAuth({
     github: {
       clientId: process.env.G1THUB_CLIENT_ID as string,
       clientSecret: process.env.G1THUB_CLIENT_SECRET as string,
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          // Cari group default
+          const defaultGroup = await prisma.userGroup.findFirst({
+            where: { isDefault: true },
+          });
+
+          if (defaultGroup) {
+            // Assign ke default group
+            user.userGroupId = defaultGroup.id;
+            user.permissions = defaultGroup.permissions;
+          }
+
+          return {
+            data: user,
+          };
+        },
+      },
     },
   },
   plugins: [admin(), bearer()],

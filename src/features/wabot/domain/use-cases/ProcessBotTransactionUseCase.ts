@@ -118,6 +118,8 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
       };
     }
 
+    const userPermissions = (cmdUser as any).userGroup?.permissions || (cmdUser as any).permissions || [];
+
     const now = new Date();
     const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
     const weekStart = new Date(now); weekStart.setDate(now.getDate() - 6); weekStart.setHours(0, 0, 0, 0);
@@ -133,6 +135,187 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     const formatIDR = (n: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
     const sumExpense = (rows: any[]) => rows.filter(t => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
     const sumIncome = (rows: any[]) => rows.filter(t => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
+
+    // === Helper Bot Commands ===
+    const getActiveBills = async (userId: string) => {
+      return await prisma.recurringBill.findMany({
+        where: { userId, status: "ACTIVE" },
+        orderBy: { createdAt: "asc" }
+      });
+    };
+
+    const getActiveSavings = async (userId: string) => {
+      return await prisma.savingGoal.findMany({
+        where: { userId, status: "ACTIVE" },
+        orderBy: { createdAt: "asc" }
+      });
+    };
+
+    // === !tagihan ===
+    if (lowerText === "!tagihan") {
+      if (!userPermissions.includes("plan")) return { success: true, replyText: true, data: { message: `🚫 Kamu tidak memiliki akses ke fitur Tagihan (Plan).${HELP_FOOTER}` } };
+      const bills = await getActiveBills(cmdUser.id);
+      if (!bills.length) return { success: true, replyText: true, data: { message: `✅ Tidak ada tagihan aktif untuk bulan ini.${HELP_FOOTER}` } };
+
+      const payments = await prisma.billPayment.findMany({
+        where: { userId: cmdUser.id, period: cycle.period, billId: { in: bills.map(b => b.id) } }
+      });
+
+      const lines = bills.map((b, i) => {
+        const payment = payments.find(p => p.billId === b.id);
+        const code = `T${i + 1}`;
+        let statusStr = "Belum Bayar";
+        if (payment) {
+          statusStr = payment.status === "PAID" ? "✅ Lunas" : "⏩ Dilewati";
+        }
+        return `[${code}] ${b.name} (${formatIDR(b.amount)}) — ${statusStr}`;
+      }).join("\n");
+
+      return { success: true, replyText: true, data: { message: `📅 *Daftar Tagihan Aktif*\n\n${lines}\n\nKetik *!bayar <kode>* untuk melunasi.\nContoh: *!bayar T1*${HELP_FOOTER}` } };
+    }
+
+    // === !tabungan ===
+    if (lowerText === "!tabungan") {
+      if (!userPermissions.includes("plan")) return { success: true, replyText: true, data: { message: `🚫 Kamu tidak memiliki akses ke fitur Tabungan (Plan).${HELP_FOOTER}` } };
+      const savings = await getActiveSavings(cmdUser.id);
+      if (!savings.length) return { success: true, replyText: true, data: { message: `🎯 Belum ada target tabungan yang aktif.${HELP_FOOTER}` } };
+
+      const lines = await Promise.all(savings.map(async (s, i) => {
+        const code = `S${i + 1}`;
+        const contributions = await prisma.savingContribution.findMany({ where: { goalId: s.id } });
+        const totalSaved = contributions.reduce((sum, c) => sum + c.amount, 0);
+        const pct = s.targetAmount > 0 ? Math.floor((totalSaved / s.targetAmount) * 100) : 0;
+        return `[${code}] ${s.icon || "🎯"} ${s.name}: ${formatIDR(totalSaved)} / ${formatIDR(s.targetAmount)} (${pct}%)`;
+      }));
+
+      return { success: true, replyText: true, data: { message: `🎯 *Daftar Target Tabungan*\n\n${lines.join("\n")}\n\nKetik *!nabung <nominal> <kode>* untuk menabung manual.\nContoh: *!nabung 50000 S1*${HELP_FOOTER}` } };
+    }
+
+    // === !bayar <kode> ===
+    if (lowerText.startsWith("!bayar ")) {
+      if (!userPermissions.includes("plan")) return { success: true, replyText: true, data: { message: `🚫 Kamu tidak memiliki akses ke fitur Tagihan (Plan).${HELP_FOOTER}` } };
+      const kode = lowerText.split(" ")[1]?.toUpperCase();
+      if (!kode || !kode.startsWith("T")) return { success: true, replyText: true, data: { message: `❌ Format salah. Gunakan: *!bayar <kode>*\nContoh: *!bayar T1*${HELP_FOOTER}` } };
+      
+      const index = parseInt(kode.substring(1)) - 1;
+      const bills = await getActiveBills(cmdUser.id);
+      const bill = bills[index];
+
+      if (!bill) return { success: true, replyText: true, data: { message: `❌ Tagihan dengan kode *${kode}* tidak ditemukan.${HELP_FOOTER}` } };
+
+      const existingPayment = await prisma.billPayment.findUnique({
+        where: { billId_period: { billId: bill.id, period: cycle.period } }
+      });
+
+      if (existingPayment && existingPayment.status === "PAID") {
+        return { success: true, replyText: true, data: { message: `✅ Tagihan *${bill.name}* sudah lunas di siklus ini.${HELP_FOOTER}` } };
+      }
+
+      // Catat pengeluaran di transaction
+      const tx = await prisma.transaction.create({
+        data: {
+          userId: cmdUser.id,
+          categoryId: bill.categoryId,
+          type: "EXPENSE",
+          amount: bill.amount,
+          note: `Bayar tagihan: ${bill.name}`,
+          date: now
+        }
+      });
+
+      // Upsert bill payment
+      await prisma.billPayment.upsert({
+        where: { billId_period: { billId: bill.id, period: cycle.period } },
+        create: {
+          billId: bill.id,
+          userId: cmdUser.id,
+          period: cycle.period,
+          status: "PAID",
+          paidAmount: bill.amount,
+          transactionId: tx.id
+        },
+        update: {
+          status: "PAID",
+          paidAmount: bill.amount,
+          transactionId: tx.id
+        }
+      });
+
+      return { success: true, replyText: true, data: { message: `✅ Tagihan *${bill.name}* berhasil dilunasi sebesar ${formatIDR(bill.amount)}!${HELP_FOOTER}` } };
+    }
+
+    // === !lewat <kode> ===
+    if (lowerText.startsWith("!lewat ")) {
+      if (!userPermissions.includes("plan")) return { success: true, replyText: true, data: { message: `🚫 Kamu tidak memiliki akses ke fitur Tagihan (Plan).${HELP_FOOTER}` } };
+      const kode = lowerText.split(" ")[1]?.toUpperCase();
+      if (!kode || !kode.startsWith("T")) return { success: true, replyText: true, data: { message: `❌ Format salah. Gunakan: *!lewat <kode>*\nContoh: *!lewat T1*${HELP_FOOTER}` } };
+      
+      const index = parseInt(kode.substring(1)) - 1;
+      const bills = await getActiveBills(cmdUser.id);
+      const bill = bills[index];
+
+      if (!bill) return { success: true, replyText: true, data: { message: `❌ Tagihan dengan kode *${kode}* tidak ditemukan.${HELP_FOOTER}` } };
+
+      const existingPayment = await prisma.billPayment.findUnique({
+        where: { billId_period: { billId: bill.id, period: cycle.period } }
+      });
+
+      if (existingPayment && existingPayment.status === "PAID") {
+        return { success: true, replyText: true, data: { message: `⚠️ Tagihan *${bill.name}* sudah terlanjur dilunasi di siklus ini.${HELP_FOOTER}` } };
+      }
+
+      await prisma.billPayment.upsert({
+        where: { billId_period: { billId: bill.id, period: cycle.period } },
+        create: {
+          billId: bill.id,
+          userId: cmdUser.id,
+          period: cycle.period,
+          status: "SKIPPED",
+        },
+        update: {
+          status: "SKIPPED",
+        }
+      });
+
+      return { success: true, replyText: true, data: { message: `⏩ Tagihan *${bill.name}* berhasil dilewati untuk siklus ini.${HELP_FOOTER}` } };
+    }
+
+    // === !nabung <nominal> <kode> ===
+    if (lowerText.startsWith("!nabung ")) {
+      if (!userPermissions.includes("plan")) return { success: true, replyText: true, data: { message: `🚫 Kamu tidak memiliki akses ke fitur Tabungan (Plan).${HELP_FOOTER}` } };
+      const parts = lowerText.split(" ");
+      const nominalStr = parts[1];
+      const kode = parts[2]?.toUpperCase();
+
+      if (!nominalStr || !kode || !kode.startsWith("S")) {
+        return { success: true, replyText: true, data: { message: `❌ Format salah. Gunakan: *!nabung <nominal> <kode>*\nContoh: *!nabung 50000 S1*${HELP_FOOTER}` } };
+      }
+
+      const nominal = parseInt(nominalStr.replace(/[^0-9]/g, ""));
+      if (isNaN(nominal) || nominal <= 0) {
+        return { success: true, replyText: true, data: { message: `❌ Nominal tidak valid.${HELP_FOOTER}` } };
+      }
+
+      const index = parseInt(kode.substring(1)) - 1;
+      const savings = await getActiveSavings(cmdUser.id);
+      const saving = savings[index];
+
+      if (!saving) return { success: true, replyText: true, data: { message: `❌ Tabungan dengan kode *${kode}* tidak ditemukan.${HELP_FOOTER}` } };
+
+      await prisma.savingContribution.create({
+        data: {
+          goalId: saving.id,
+          userId: cmdUser.id,
+          amount: nominal,
+          source: "MANUAL",
+          note: "Setoran via WA",
+          date: now,
+          period: cycle.period
+        }
+      });
+
+      return { success: true, replyText: true, data: { message: `✅ Berhasil menabung ${formatIDR(nominal)} untuk *${saving.name}*! Semangat terus nabungnya! 🚀${HELP_FOOTER}` } };
+    }
 
     // === !today ===
     if (lowerText === "!today") {
@@ -424,6 +607,15 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
           `!dev-cron   — Trigger cron bulanan sekarang juga\n` +
           `!dev-blast  — Simulasi blast laporan akhir siklus`
         : "";
+      const planSection = userPermissions.includes("plan")
+        ? `\n\n💸 *Tagihan & Tabungan*\n` +
+          `!tagihan — Daftar tagihan aktif bulan ini\n` +
+          `!bayar <kode> — Lunasi tagihan (Cth: !bayar T1)\n` +
+          `!lewat <kode> — Lewati tagihan bulan ini (Cth: !lewat T2)\n` +
+          `!tabungan — Daftar target tabungan\n` +
+          `!nabung <nom> <kode> — Setor tabungan (Cth: !nabung 50000 S1)`
+        : "";
+
       return {
         success: true, replyText: true,
         data: {
@@ -441,7 +633,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
             `!undo Y  — Hapus transaksi terakhir (setelah konfirmasi)\n` +
             `!link KODE — Hubungkan akun & aktifkan grup\n` +
             `!web     — Dapatkan tautan website Kainest` +
-            adminSection + `\n\n` +
+            adminSection + planSection + `\n\n` +
             `💬 *Mencatat Transaksi*\n` +
             `Cukup ketik transaksimu secara natural, contoh:\n` +
             `_Makan siang 25k_ atau _Gajian 3.5jt_`

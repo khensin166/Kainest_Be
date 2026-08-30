@@ -14,6 +14,13 @@ export class AdminRepository {
         role: true,
         banned: true,
         permissions: true,
+        userGroupId: true,
+        userGroup: {
+          select: {
+            id: true,
+            name: true,
+          }
+        },
         profile: {
           select: {
             avatarUrl: true,
@@ -40,7 +47,14 @@ export class AdminRepository {
         email: true,
         role: true,
         banned: true,
-        permissions: true
+        permissions: true,
+        userGroupId: true,
+        userGroup: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
       }
     });
   }

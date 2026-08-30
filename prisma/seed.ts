@@ -37,9 +37,27 @@ async function main() {
       { shift_type: '3', activity_name: 'Mulai kerja', time_start: '22:00', reminder_time: '21:30', note: 'Snack sehat tengah malam' },
       { shift_type: '3', activity_name: 'Sarapan ringan (setelah kerja)', time_start: '07:30', reminder_time: '07:00', note: 'Supaya tidur tidak lapar' },
       { shift_type: '3', activity_name: 'Tidur utama', time_start: '08:00', reminder_time: '07:30', note: 'Gunakan masker mata / tirai gelap' },
-    ]
+    ],
+    skipDuplicates: true
   })
   console.log('✅ ShiftActivity data seeded successfully!')
+
+  // --- Seed UserGroup Default ---
+  const defaultGroupName = "Default Keuangan"
+  await prisma.userGroup.upsert({
+    where: { name: defaultGroupName },
+    update: {
+      isDefault: true,
+      permissions: ["budgeting", "history", "split"]
+    },
+    create: {
+      name: defaultGroupName,
+      description: "Grup default untuk pengguna baru",
+      permissions: ["budgeting", "history", "split"],
+      isDefault: true
+    }
+  })
+  console.log('✅ UserGroup Default seeded successfully!')
 }
 
 main()
