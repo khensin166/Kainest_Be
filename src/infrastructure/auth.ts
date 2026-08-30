@@ -40,7 +40,7 @@ export const auth = betterAuth({
       userGroupId: {
         type: "string",
         required: false,
-        fieldName: "user_group_id",
+        fieldName: "userGroupId",
       },
       permissions: {
         type: "string[]",
