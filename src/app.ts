@@ -16,6 +16,7 @@ import { notificationRoute } from "./features/notification/presentation/notifica
 import { feedbackRoute } from "./features/feedback/presentation/feedbackRoute.js";
 import { systemUpdateRoute } from "./features/systemUpdate/presentation/systemUpdateRoute.js";
 import { splitRoute } from "./features/split/presentation/splitRoute.js";
+import rbacRoute from "./features/rbac/presentation/rbac.route.js";
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
 import { loggingMiddleware } from './infrastructure/middlewares/LoggingMiddleware.js'
@@ -105,6 +106,7 @@ app.route("/feedbacks", feedbackRoute)
 app.route("/system-updates", systemUpdateRoute)
 app.route("/split", splitRoute)
 app.route("/plans", plansRoute)
+app.route("/rbac", rbacRoute)
 
 app.get('/', (c) => c.text('Hello from Kainest Backend! 🚀'))
 

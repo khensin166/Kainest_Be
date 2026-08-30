@@ -75,6 +75,28 @@ export const auth = betterAuth({
       clientSecret: process.env.G1THUB_CLIENT_SECRET as string,
     },
   },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          // Cari group default
+          const defaultGroup = await prisma.userGroup.findFirst({
+            where: { isDefault: true },
+          });
+
+          if (defaultGroup) {
+            // Assign ke default group
+            user.userGroupId = defaultGroup.id;
+            user.permissions = defaultGroup.permissions;
+          }
+
+          return {
+            data: user,
+          };
+        },
+      },
+    },
+  },
   plugins: [admin(), bearer()],
   advanced: {
     crossSubDomainCookies: {

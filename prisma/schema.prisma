@@ -89,7 +89,14 @@ model User {
   banned      Boolean? @default(false)
   banReason   String?
   banExpires  DateTime?
-  permissions String[] @default(["budgeting"]) // Array of allowed modules (e.g. ["budgeting", "notes", "todos", "wabot"])
+
+  // Field permissions lama - dipertahankan untuk kompatibilitas mundur.
+  // Akan secara bertahap digantikan oleh UserGroup.
+  permissions String[] @default([]) // Kini diisi dari UserGroup via API
+
+  // Relasi ke IAM User Group
+  userGroupId String?    @map("user_group_id")
+  userGroup   UserGroup? @relation(fields: [userGroupId], references: [id])
 
   // Relasi ke Split Bill Session
   splitBills  SplitBillSession[]
@@ -748,3 +755,20 @@ model PocketTemplate {
   @@unique([userId, name])
   @@schema("kainest")
 }
+
+// --- IAM: User Group Model ---
+// Mirip seperti IAM Group di AWS — menyimpan kumpulan permission.
+// User hanya perlu di-assign ke satu Group, dan semua izinnya otomatis mengikuti.
+model UserGroup {
+  id          String   @id @default(uuid())
+  name        String   @unique // e.g. "Default User", "Beta Tester", "Premium"
+  description String?
+  permissions String[] // e.g. ["budgeting", "split", "wabot", "plan"]
+  isDefault   Boolean  @default(false) // Jika true, grup ini otomatis di-assign ke user baru saat registrasi
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]   // Relasi balik ke User
+
+  @@schema("kainest")
+}
+
