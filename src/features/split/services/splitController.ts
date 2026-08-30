@@ -1,7 +1,7 @@
 import { Context } from "hono";
 import { SplitBillSessionRepository } from "../domain/SplitBillSessionRepository.js";
 import { auth } from "../../../infrastructure/auth.js";
-import { sendGroupMessageViaGowa } from "../../wabot/services/BlastController.js";
+import { sendTextViaGowa } from "../../../utils/gowaService.js";
 
 const RECEIPT_AI_URL = process.env.RECEIPT_AI_URL || "https://receipt-ai.kenantomfie.com";
 const RECEIPT_AI_TOKEN = process.env.RECEIPT_AI_TOKEN || "dev_token_123";
@@ -135,8 +135,8 @@ export const blastSplitBillController = async (c: Context) => {
       return c.json({ error: "Target dan pesan harus diisi" }, 400);
     }
 
-    // Mengirim WA menggunakan fungsi bawaan GOWA dari BlastController
-    await sendGroupMessageViaGowa(targetPhone, message);
+    // Mengirim WA menggunakan fungsi bawaan GOWA terpusat
+    await sendTextViaGowa(targetPhone, message);
 
     return c.json({ status: "success", message: "Blast dikirim!" });
   } catch (error: any) {
