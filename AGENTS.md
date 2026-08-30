@@ -32,6 +32,12 @@
   - Isolasi blast pengingat shift kerja pada mode staging agar hanya terkirim ke `STAGING_ALLOWED_NUMBERS`.
   - Perbaikan warning *"This message will not disappear..."* dengan menyalin status durasi ephemeral (`expiration` milidetik) dari pesan masuk dan meneruskannya ke objek `sendMessage` (baik teks maupun stiker).
 
+## Update Akhir Agustus 2026 (Batch 3)
+- **Backend (Autentikasi & RBAC)**:
+  - Mengimplementasikan `UserGroup` pada Prisma schema dan proses seeding otomatis di `rbac.controller.ts`.
+  - Menyelesaikan perbaikan _bug_ `FAILED_TO_CREATE_USER` yang dipicu oleh konflik penamaan pada *better-auth*. Properti `fieldName` yang sebelumnya diisi dengan `user_group_id` diganti menjadi `userGroupId` agar Prisma *client* (berbasis _camelCase_) bisa memprosesnya dengan baik.
+  - Membatasi eksekusi command WhatsApp (GOWA) tertentu berdasarkan *role* di `ProcessBotTransactionUseCase.ts`. Pengguna dengan akses *Free* tidak bisa mengakses fungsi premium seperti `!tagihan` atau `!tabungan`.
+
 ## Update 14 Juni 2026
 - **Frontend & Backend (Isolasi Kata Kunci Kantong)**: 
   - Logika kata kunci AI (*keywords*) dipindahkan dari level Kategori ke level Kantong (`BudgetPocket`). Ini memungkinkan pengguna menambahkan kata kunci custom ke kantong mereka sendiri tanpa memengaruhi kategori global atau pengguna lain.
