@@ -97,6 +97,14 @@ model User {
   // Relasi ke Log Penggunaan AI
   apiUsageLogs ApiUsageLog[]
 
+  // --- Rencana Keuangan: tagihan, cicilan, dan wishlist tabungan ---
+  recurringBills      RecurringBill[]
+  billPayments        BillPayment[]
+  savingGoals         SavingGoal[]
+  savingContributions SavingContribution[]
+  commitmentAlerts    CommitmentAlert[]
+  pocketTemplates     PocketTemplate[]
+
   @@schema("kainest")
 }
 
@@ -246,8 +254,9 @@ model BudgetCategory {
   userId String? // Nullable. Jika null = Kategori Global (semua user punya)
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  transactions Transaction[]
-  pockets      BudgetPocket[] // Relasi ke BudgetPocket
+  transactions   Transaction[]
+  pockets        BudgetPocket[] // Relasi ke BudgetPocket
+  recurringBills RecurringBill[] // Tagihan yang memotong kantong kategori ini
 
   @@index([userId])
   @@index([isDefault])
@@ -274,6 +283,10 @@ model MonthlyFinancialHistory {
   
   // Ruang untuk AI di masa depan
   aiEvaluation    String?  @db.Text
+
+  /// Snapshot komitmen (tagihan & wishlist) pada siklus ini.
+  /// Nullable agar baris riwayat lama tetap valid tanpa backfill.
+  commitmentsSnapshot Json?
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -321,6 +334,9 @@ model Transaction {
   category   BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+
+  /// Terisi bila transaksi ini lahir dari pelunasan sebuah tagihan.
+  billPayment BillPayment?
 
   @@index([userId, date])
   @@index([userId, type])                      // Filter tipe (INCOME/EXPENSE)
@@ -534,3 +550,201 @@ model AISuggestion {
   @@schema("kainest")
 }
 
+
+// ==========================================
+// 📅 RENCANA KEUANGAN — Tagihan, Cicilan & Wishlist Tabungan
+// Rancangan lengkap: doc/rencana_tabungan_tagihan.md
+//
+// Asimetri yang dipegang di seluruh fitur ini:
+// tagihan MENGHASILKAN Transaction (konsumsi), tabungan TIDAK (pemindahan).
+// Keduanya sama-sama memotong budget, tapi hanya satu yang boleh muncul di
+// totalSpent dan grafik tren pengeluaran.
+// ==========================================
+
+enum BillFrequency {
+  MONTHLY
+  WEEKLY
+  YEARLY
+  ONE_TIME
+  @@schema("kainest")
+}
+
+enum BillStatus {
+  ACTIVE
+  COMPLETED // tenor cicilan habis; berhenti menagih sendiri
+  ARCHIVED
+  @@schema("kainest")
+}
+
+enum BillPaymentStatus {
+  PAID
+  SKIPPED
+  @@schema("kainest")
+}
+
+enum SavingGoalStatus {
+  ACTIVE
+  ACHIEVED
+  ARCHIVED
+  @@schema("kainest")
+}
+
+enum ContributionSource {
+  AUTO_CYCLE // dibuat cron di awal siklus dari monthlyAllocation
+  MANUAL     // disetor sadar oleh pengguna
+  WITHDRAWAL // penarikan (amount negatif)
+  @@schema("kainest")
+}
+
+enum CommitmentZone {
+  SAFE
+  WARNING
+  DANGER
+  @@schema("kainest")
+}
+
+/// Tagihan berulang & cicilan bertenor.
+/// Tidak ada pencatatan otomatis: pengeluaran hanya tercatat bila pengguna
+/// mengonfirmasi pembayaran.
+model RecurringBill {
+  id         String @id @default(uuid())
+  userId     String
+  categoryId String
+  name       String
+  amount     Int // perkiraan; boleh dikoreksi saat melunasi
+
+  frequency BillFrequency @default(MONTHLY)
+  dueDay    Int // 1-31, diisi pengguna
+  dueMonth  Int? // 1-12, hanya dipakai saat frequency = YEARLY
+  startDate DateTime      @db.Date
+
+  /// Tenor cicilan. null = berulang tanpa akhir (kos, listrik, langganan).
+  totalInstallments Int?
+  /// Bertambah setiap BillPayment berstatus PAID. Mencapai tenor -> COMPLETED.
+  paidInstallments  Int  @default(0)
+
+  reminderDaysBefore Int        @default(3)
+  status             BillStatus @default(ACTIVE)
+  note               String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  payments BillPayment[]
+
+  @@index([userId, status])
+  @@index([userId, dueDay])
+  @@index([categoryId])
+  @@schema("kainest")
+}
+
+/// Satu baris per tagihan per siklus. Mencegah tagihan yang sama lunas dua kali.
+model BillPayment {
+  id     String   @id @default(uuid())
+  billId String
+  userId String
+  /// Kunci siklus, memakai konvensi yang sama dengan MonthlyFinancialHistory.period
+  /// (tanggal 1 bulan cycleEnd), dihitung lewat utils/cycleBoundaries.ts.
+  period DateTime @db.Date
+
+  status        BillPaymentStatus @default(PAID)
+  installmentNo Int? // angsuran ke-berapa; null bila tagihan tanpa tenor
+  paidAmount    Int? // null bila SKIPPED
+  transactionId String?           @unique // null bila SKIPPED
+  paidAt        DateTime          @default(now())
+
+  bill        RecurringBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transaction Transaction?  @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@unique([billId, period])
+  @@index([userId, period])
+  @@schema("kainest")
+}
+
+/// Wishlist tabungan. BUKAN BudgetPocket — pocket dibatasi @@unique([userId, categoryId])
+/// sehingga pengguna hanya akan bisa punya satu target seumur hidup.
+model SavingGoal {
+  id                String    @id @default(uuid())
+  userId            String
+  name              String // "Jalan ke Bali"
+  targetAmount      Int // 10_000_000
+  monthlyAllocation Int       @default(0) // memotong budget siklus berjalan
+  targetDate        DateTime? @db.Date
+  icon              String? // emoji, mis. "🏝️"
+
+  status    SavingGoalStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contributions SavingContribution[]
+
+  @@index([userId, status])
+  @@schema("kainest")
+}
+
+/// Setoran tabungan. Nominal negatif = penarikan, supaya riwayatnya jujur
+/// alih-alih menghapus baris lama.
+model SavingContribution {
+  id     String @id @default(uuid())
+  goalId String
+  userId String
+
+  amount Int
+  source ContributionSource @default(MANUAL)
+  note   String?
+  date   DateTime
+  period DateTime           @db.Date
+
+  createdAt DateTime @default(now())
+
+  goal SavingGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Setoran otomatis hanya boleh sekali per siklus per wishlist. Pengaman ini
+  /// menahan cron yang terpanggil dua kali (restart container, jam tumpang tindih)
+  /// dari menggandakan setoran.
+  @@unique([goalId, period, source])
+  @@index([userId, period])
+  @@index([goalId, date])
+  @@schema("kainest")
+}
+
+/// Penjaga anti-spam peringatan solvabilitas: satu peringatan per zona per siklus.
+/// Tanpa ini, cron harian mengirim peringatan merah yang sama tiap pagi sampai
+/// botnya dibisukan pengguna.
+model CommitmentAlert {
+  id        String         @id @default(uuid())
+  userId    String
+  period    DateTime       @db.Date
+  zone      CommitmentZone
+  shortfall Int            @default(0) // seberapa kurang saat DANGER
+  sentAt    DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, period, zone])
+  @@index([userId, period])
+  @@schema("kainest")
+}
+
+/// Template susunan kantong buatan pengguna. Menyatu dengan "Blueprint Cepat"
+/// bawaan di frontend: blueprint = template sistem yang tak bisa dihapus,
+/// baris di tabel ini = template pengguna. Satu daftar, satu cara pakai.
+model PocketTemplate {
+  id     String @id @default(uuid())
+  userId String
+  name   String // nama custom, mis. "Bulan Ramadan"
+  /// [{ categoryId, limitType, percentage, limitAmount, keywords }]
+  pockets Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@schema("kainest")
+}
