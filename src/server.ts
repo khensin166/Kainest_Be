@@ -5,6 +5,7 @@ import app from './app.js'
 import { logger } from './infrastructure/logger/logger.js'
 import { startShiftScheduler } from './features/wabot/services/ShiftSchedulerService.js'
 import { startMonthlyResetScheduler } from './features/budgeting/services/MonthlyResetCron.js'
+import { startBillReminderScheduler } from './features/budgeting/services/BillReminderCron.js'
 
 const PORT = Number(process.env.PORT) || 3000
 
@@ -17,4 +18,6 @@ serve({
   startShiftScheduler()
   // Aktifkan cron job reset bulanan & blast ringkasan siklus (hanya jika ENABLE_SCHEDULER=true)
   startMonthlyResetScheduler()
+  // Aktifkan cron job pengingat tagihan harian
+  startBillReminderScheduler()
 })
