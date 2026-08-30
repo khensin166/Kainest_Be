@@ -103,6 +103,14 @@ export const updateGroup = async (c: Context) => {
       },
     });
 
+    // Jika permissions berubah, sinkronisasikan ke semua user dalam grup ini
+    if (permissions !== undefined) {
+      await prisma.user.updateMany({
+        where: { userGroupId: id },
+        data: { permissions },
+      });
+    }
+
     logger.info("[RBAC] User Group diperbarui:", { groupId: id });
     return c.json({ success: true, data: updated });
   } catch (error: any) {
