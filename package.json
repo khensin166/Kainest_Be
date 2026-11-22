@@ -27,6 +27,7 @@
     "better-auth": "^1.6.11",
     "cloudinary": "^2.8.0",
     "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
     "googleapis": "^173.0.0",
     "groq-sdk": "^0.36.0",
     "hono": "^4.10.1",

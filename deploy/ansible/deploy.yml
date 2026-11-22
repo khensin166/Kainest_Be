@@ -48,6 +48,12 @@
           GRAFANA_LOKI_URL={{ grafana_loki_url }}
           RECEIPT_AI_TOKEN={{ receipt_ai_token }}
           RECEIPT_AI_URL={{ receipt_ai_url }}
+          ACADEMIC_DATA_DIR=/app/data/academic
+          ACADEMIC_EXCEL_DOWNLOAD_URL={{ academic_excel_download_url | default('') }}
+          ACADEMIC_REMINDER_TARGET_PHONE={{ academic_reminder_target_phone | default('') }}
+          ACADEMIC_SYNC_BATCH_SIZE={{ academic_sync_batch_size | default('30') }}
+          ACADEMIC_ARCHIVE_RETENTION_DAYS={{ academic_archive_retention_days | default('30') }}
+          ACADEMIC_MUTE_WEEKLY_LECTURE={{ academic_mute_weekly_lecture | default('true') }}
         dest: "{{ project_dir }}/.env"
         mode: '0600'
       no_log: true

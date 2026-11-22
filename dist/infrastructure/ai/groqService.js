@@ -3,6 +3,8 @@ import { logger } from "../../utils/logger.js";
 import { prisma } from "../../infrastructure/database/prisma.js";
 const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY,
+    baseURL: process.env.GROQ_BASE_URL,
+    timeout: 120000, // 120 seconds untuk memberi waktu model reasoning (Qwen) berpikir
 });
 /**
  * Daftar model prioritas fallback.

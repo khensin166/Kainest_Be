@@ -20,6 +20,9 @@ export const botTransactionRepository = {
                     { phone_number: phoneNumber }
                 ]
             },
+            include: {
+                userGroup: true
+            }
         });
         if (!user) {
             // Coba cari dengan LIKE pattern (contoh: nomor di db '08123', dari bot '628123')
@@ -32,6 +35,9 @@ export const botTransactionRepository = {
                         endsWith: phoneTail,
                     },
                 },
+                include: {
+                    userGroup: true
+                }
             });
         }
         return user;

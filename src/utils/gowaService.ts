@@ -5,7 +5,17 @@ const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
 const GOWA_API_KEY = process.env.WA_BOT_API_KEY || process.env.GOWA_API_KEY || "";
 const GOWA_DEVICE_ID = process.env.WA_BOT_DEVICE_ID || process.env.GOWA_DEVICE_ID || "";
 
-export async function sendTextViaGowa(phone: string, message: string): Promise<void> {
+export interface GowaSendResult {
+  ok: boolean;
+  status?: number;
+  body?: string;
+  error?: string;
+}
+
+export async function sendTextViaGowaWithResult(
+  phone: string,
+  message: string
+): Promise<GowaSendResult> {
   const url = `${GOWA_BASE_URL}/send/message`;
   try {
     const resp = await fetch(url, {
@@ -17,11 +27,18 @@ export async function sendTextViaGowa(phone: string, message: string): Promise<v
       },
       body: JSON.stringify({ phone, message }),
     });
+    const text = await resp.text();
     if (!resp.ok) {
-      const text = await resp.text();
       logger.error(`[GOWA] Gagal kirim WA ke ${phone}: ${resp.status} ${text}`);
+      return { ok: false, status: resp.status, body: text, error: `HTTP ${resp.status}: ${text}` };
     }
+    return { ok: true, status: resp.status, body: text };
   } catch (err: any) {
     logger.error(`[GOWA] Exception kirim WA ke ${phone}: ${err.message}`);
+    return { ok: false, error: err?.message || String(err) };
   }
+}
+
+export async function sendTextViaGowa(phone: string, message: string): Promise<void> {
+  await sendTextViaGowaWithResult(phone, message);
 }

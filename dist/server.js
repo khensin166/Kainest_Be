@@ -5,6 +5,8 @@ import app from './app.js';
 import { logger } from './infrastructure/logger/logger.js';
 import { startShiftScheduler } from './features/wabot/services/ShiftSchedulerService.js';
 import { startMonthlyResetScheduler } from './features/budgeting/services/MonthlyResetCron.js';
+import { startBillReminderScheduler } from './features/budgeting/services/BillReminderCron.js';
+import { startAcademicCalendarScheduler } from './features/academicCalendar/services/AcademicCalendarCron.js';
 const PORT = Number(process.env.PORT) || 3000;
 serve({
     fetch: app.fetch,
@@ -15,4 +17,8 @@ serve({
     startShiftScheduler();
     // Aktifkan cron job reset bulanan & blast ringkasan siklus (hanya jika ENABLE_SCHEDULER=true)
     startMonthlyResetScheduler();
+    // Aktifkan cron job pengingat tagihan harian
+    startBillReminderScheduler();
+    // Aktifkan cron job sinkronisasi & pengingat kalender kuliah BINUS LMS
+    startAcademicCalendarScheduler();
 });

@@ -7,3 +7,6 @@ node_modules
 # Local log files (daily rotation, for local ETL practice only)
 logs/
 *.log
+
+# Local academic calendar staging & archive data
+data/

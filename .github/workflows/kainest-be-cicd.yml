@@ -144,5 +144,10 @@ jobs:
             -e "enable_scheduler=${{ vars.ENABLE_SCHEDULER }}" \
             -e "grafana_loki_url=${{ vars.GRAFANA_LOKI_URL }}" \
             -e "receipt_ai_token=${{ vars.RECEIPT_AI_TOKEN }}" \
-            -e "receipt_ai_url=${{ vars.RECEIPT_AI_URL }}"
+            -e "receipt_ai_url=${{ vars.RECEIPT_AI_URL }}" \
+            -e "academic_excel_download_url=${{ vars.ACADEMIC_EXCEL_DOWNLOAD_URL }}" \
+            -e "academic_reminder_target_phone=${{ vars.ACADEMIC_REMINDER_TARGET_PHONE }}" \
+            -e "academic_sync_batch_size=${{ vars.ACADEMIC_SYNC_BATCH_SIZE }}" \
+            -e "academic_archive_retention_days=${{ vars.ACADEMIC_ARCHIVE_RETENTION_DAYS }}" \
+            -e "academic_mute_weekly_lecture=${{ vars.ACADEMIC_MUTE_WEEKLY_LECTURE }}"
 

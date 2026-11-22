@@ -6,6 +6,7 @@ import { logger } from './infrastructure/logger/logger.js'
 import { startShiftScheduler } from './features/wabot/services/ShiftSchedulerService.js'
 import { startMonthlyResetScheduler } from './features/budgeting/services/MonthlyResetCron.js'
 import { startBillReminderScheduler } from './features/budgeting/services/BillReminderCron.js'
+import { startAcademicCalendarScheduler } from './features/academicCalendar/services/AcademicCalendarCron.js'
 
 const PORT = Number(process.env.PORT) || 3000
 
@@ -20,4 +21,6 @@ serve({
   startMonthlyResetScheduler()
   // Aktifkan cron job pengingat tagihan harian
   startBillReminderScheduler()
+  // Aktifkan cron job sinkronisasi & pengingat kalender kuliah BINUS LMS
+  startAcademicCalendarScheduler()
 })

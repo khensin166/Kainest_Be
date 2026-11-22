@@ -17,6 +17,9 @@ import { bulkSetupPocketsUseCase } from "../domain/use-cases/BulkSetupPocketsUse
 import { updatePocketKeywordsUseCase } from "../domain/use-cases/UpdatePocketKeywordsUseCase.js";
 import { classifyTransactionUseCase } from "../domain/use-cases/ClassifyTransactionUseCase.js";
 import { getMonthlyHistoryUseCase } from "../domain/use-cases/GetMonthlyHistoryUseCase.js";
+import { getAiSuggestionUseCase } from "../domain/use-cases/GetAiSuggestionUseCase.js";
+import { applyAiSuggestionUseCase } from "../domain/use-cases/ApplyAiSuggestionUseCase.js";
+import { dismissAiSuggestionUseCase } from "../domain/use-cases/DismissAiSuggestionUseCase.js";
 // === Create Transaction ===
 export const createTransactionController = async (c) => {
     const userId = c.get("userId"); // Dari authMiddleware
@@ -293,6 +296,40 @@ export const classifyTransactionController = async (c) => {
 export const getMonthlyHistoryController = async (c) => {
     const userId = c.get("userId");
     const result = await getMonthlyHistoryUseCase(userId);
+    if (!result.success)
+        c.status(result.status);
+    return c.json(result);
+};
+// === GET: Saran AI Budget Terbaru (Belum di-apply) ===
+export const getAiSuggestionController = async (c) => {
+    const userId = c.get("userId");
+    const result = await getAiSuggestionUseCase(userId);
+    if (!result.success)
+        c.status(result.status);
+    return c.json(result);
+};
+// === POST: 1-Click Apply Saran AI ===
+export const applyAiSuggestionController = async (c) => {
+    const userId = c.get("userId");
+    const { suggestionId } = await c.req.json();
+    if (!suggestionId) {
+        c.status(400);
+        return c.json({ success: false, message: "suggestionId wajib diisi" });
+    }
+    const result = await applyAiSuggestionUseCase(userId, suggestionId);
+    if (!result.success)
+        c.status(result.status);
+    return c.json(result);
+};
+// === POST: 1-Click Abaikan Saran AI ===
+export const dismissAiSuggestionController = async (c) => {
+    const userId = c.get("userId");
+    const { suggestionId } = await c.req.json();
+    if (!suggestionId) {
+        c.status(400);
+        return c.json({ success: false, message: "suggestionId wajib diisi" });
+    }
+    const result = await dismissAiSuggestionUseCase(userId, suggestionId);
     if (!result.success)
         c.status(result.status);
     return c.json(result);

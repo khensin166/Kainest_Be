@@ -1,6 +1,7 @@
 import { budgetRepository } from "../../data/BudgetRepository.js";
 import { pocketRepository } from "../../data/PocketRepository.js";
 import { getCycleBoundaries } from "../../../../utils/cycleBoundaries.js";
+import { totalAlokasiBulanan } from "../../../plans/domain/savingService.js";
 export const getMonthlySummaryUseCase = async (userId, payday) => {
     try {
         const now = new Date();
@@ -83,7 +84,13 @@ export const getMonthlySummaryUseCase = async (userId, payday) => {
         const totalLimit = summary.reduce((acc, curr) => acc + curr.limit, 0);
         const totalSpent = summary.reduce((acc, curr) => acc + curr.spent, 0);
         const totalIncome = history?.totalIncome || 0;
-        const unallocated = Math.max(0, salary - totalLimit);
+        const unallocatedMentah = Math.max(0, salary - totalLimit);
+        // 🆕 Alokasi wishlist tabungan ikut memakan gaji, sama seperti limit kantong.
+        // Tanpa dikurangkan, dashboard memberi tahu pengguna ada uang bebas yang
+        // sebenarnya sudah dijanjikan — di aplikasi keuangan itu bukan bug kosmetik.
+        // Lihat doc/rencana_tabungan_tagihan.md §6.
+        const alokasiWishlist = await totalAlokasiBulanan(userId);
+        const unallocated = Math.max(0, unallocatedMentah - alokasiWishlist);
         // 7. Kalkulasi MoM (Month-over-Month) berdasarkan period siklus sebelumnya
         const prevHistory = await budgetRepository.findMonthlyHistory(userId, prevPeriod);
         const prevSpent = prevHistory?.totalSpent || 0;
@@ -110,6 +117,7 @@ export const getMonthlySummaryUseCase = async (userId, payday) => {
             success: true,
             data: {
                 salary: salary,
+                payday: effectivePayday, // 🆕 Dikirim ke frontend agar BudgetSetupModal bisa pre-fill nilai yang benar
                 // Label teks bulan (untuk kompatibilitas frontend yang sudah ada)
                 month: cycleLabel,
                 // 🆕 Metadata siklus untuk informasi di frontend
@@ -125,6 +133,8 @@ export const getMonthlySummaryUseCase = async (userId, payday) => {
                     additionalIncome: totalIncome,
                     remaining: totalRemaining,
                     unallocated: unallocated,
+                    // Total yang sudah dijanjikan ke wishlist tabungan pada siklus ini.
+                    savingAllocation: alokasiWishlist,
                     mom: {
                         limit: calcMom(totalLimit, prevLimit),
                         spent: calcMom(totalSpent, prevSpent),

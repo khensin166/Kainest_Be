@@ -5,7 +5,9 @@
 // - Berjalan setiap hari pukul 00:10 (tengah malam lewat 10 menit, Asia/Jakarta)
 // - Mendeteksi user yang payday-nya jatuh pada hari ini
 // - Menghitung ringkasan keuangan siklus yang baru saja berakhir
-// - Meminta Groq AI untuk menyusun analisis & saran singkat
+// - Cek aktivitas transaksi user (7-hari = aktif, 8-14 hari = semi, >14 hari = pasif)
+// - User AKTIF: panggil Reasoning AI (Qwen) untuk evaluasi & saran budget bulan depan
+// - User PASIF: tetap blast ringkasan + peringatan ramah tanpa memanggil AI
 // - Blast pesan ringkasan tersebut ke grup WA aktif user via GOWA
 //
 // ⚠️  GUARD: Hanya aktif jika ENABLE_SCHEDULER=true (HANYA set di .env VPS Production)
@@ -13,12 +15,11 @@
 import * as schedule from "node-schedule";
 import { prisma } from "../../../infrastructure/database/prisma.js";
 import { groqService } from "../../../infrastructure/ai/groqService.js";
+import { reasoningAiService } from "../../../infrastructure/ai/reasoningAiService.js";
 import { logger } from "../../../infrastructure/logger/logger.js";
 import { getCycleBoundaries } from "../../../utils/cycleBoundaries.js";
+import { sendTextViaGowa } from "../../../utils/gowaService.js";
 // ── Env config ───────────────────────────────────────────────────────────────
-const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
-const GOWA_API_KEY = process.env.WA_BOT_API_KEY || process.env.GOWA_API_KEY || "";
-const GOWA_DEVICE_ID = process.env.WA_BOT_DEVICE_ID || process.env.GOWA_DEVICE_ID || "";
 const ENABLE_SCHEDULER = process.env.ENABLE_SCHEDULER === "true";
 // ── Helper: Format mata uang Indonesia ───────────────────────────────────────
 const formatIDR = (n) => new Intl.NumberFormat("id-ID", {
@@ -33,29 +34,6 @@ function formatMonthIndonesian(date) {
         "Juli", "Agustus", "September", "Oktober", "November", "Desember",
     ];
     return `${months[date.getMonth()]} ${date.getFullYear()}`;
-}
-// ── Helper: Kirim pesan teks via GOWA ────────────────────────────────────────
-async function sendTextViaGowa(phone, message) {
-    const url = `${GOWA_BASE_URL}/send/message`;
-    try {
-        const resp = await fetch(url, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Device-Id": GOWA_DEVICE_ID,
-                ...(GOWA_API_KEY ? { Authorization: `Basic ${GOWA_API_KEY}` } : {}),
-            },
-            body: JSON.stringify({ phone, message }),
-        });
-        if (!resp.ok) {
-            const text = await resp.text();
-            throw new Error(`GOWA send failed [${resp.status}]: ${text}`);
-        }
-        logger.info("[MonthlyReset] Blast pesan terkirim", { phone });
-    }
-    catch (err) {
-        logger.error("[MonthlyReset] Gagal kirim blast via GOWA", { phone, error: err.message });
-    }
 }
 // ── Helper: Dapatkan hari terakhir di bulan tertentu ─────────────────────────
 function getLastDayOfMonth(year, month) {
@@ -74,6 +52,21 @@ function isTodayResetDay(payday) {
     const lastDayOfYesterdayMonth = getLastDayOfMonth(yYear, yMonth);
     const effectivePayday = Math.min(payday, lastDayOfYesterdayMonth);
     return yDate === effectivePayday;
+}
+// ── Helper: Cek status aktivitas transaksi user ────────────────────────────────
+// Mengembalikan jumlah hari sejak transaksi terakhir.
+// null = tidak pernah ada transaksi sama sekali (dianggap pasif)
+async function getDaysSinceLastTransaction(userId) {
+    const lastTx = await prisma.transaction.findFirst({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+    });
+    if (!lastTx)
+        return null;
+    const now = new Date();
+    const diffMs = now.getTime() - lastTx.createdAt.getTime();
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24)); // Konversi ms ke hari
 }
 // ── Core: Kalkulasi ringkasan keuangan siklus yang berakhir ─────────────────
 async function calculateCycleSummary(userId, payday) {
@@ -100,8 +93,10 @@ async function calculateCycleSummary(userId, payday) {
     const periodLabel = cycle.prevCycleLabel; // ← Label siklus yang baru selesai (misal: "Juli 2026")
     // Format ringkasan per kantong dari snapshot JSON
     let pocketsDetail = "";
+    let pocketsRaw = [];
     if (history?.pocketsSnapshot && Array.isArray(history.pocketsSnapshot)) {
-        pocketsDetail = history.pocketsSnapshot
+        pocketsRaw = history.pocketsSnapshot;
+        pocketsDetail = pocketsRaw
             .map((p) => {
             const pct = p.limitAmount > 0 ? Math.round((p.spent / p.limitAmount) * 100) : 0;
             const bar = pct >= 100 ? "🔴" : pct >= 75 ? "🟡" : "🟢";
@@ -109,7 +104,7 @@ async function calculateCycleSummary(userId, payday) {
         })
             .join("\n");
     }
-    return { salary, totalExpense, totalIncome, surplus, pocketsDetail, periodLabel };
+    return { salary, totalExpense, totalIncome, surplus, pocketsDetail, pocketsRaw, periodLabel };
 }
 // ── Core: Generate AI insight untuk ringkasan ───────────────────────────────
 async function generateAiInsight(summary, userId) {
@@ -140,8 +135,102 @@ export async function processUserReset(user) {
     logger.info(`[MonthlyReset] Memproses reset untuk user: ${user.name || user.id}`);
     const payday = user.payday ?? 31;
     const summary = await calculateCycleSummary(user.id, payday);
+    // ── Cek status aktivitas transaksi user ────────────────────────────────────
+    const daysSinceLast = await getDaysSinceLastTransaction(user.id);
+    const isActive = daysSinceLast !== null && daysSinceLast <= 7;
+    const isPassive = daysSinceLast === null || daysSinceLast > 14;
+    logger.info(`[MonthlyReset] Status aktivitas user ${user.id}`, {
+        daysSinceLast,
+        isActive,
+        isPassive,
+    });
+    // ── Bagian 1: Reasoning AI hanya untuk user AKTIF ──────────────────────────
+    let aiSuggestionNote = "";
+    if (isActive) {
+        logger.info(`[MonthlyReset] 🧠 User aktif — Memanggil Reasoning AI untuk evaluasi budget...`);
+        const pocketsData = Array.isArray(summary.pocketsRaw)
+            ? summary.pocketsRaw
+            : [];
+        const userContextJson = JSON.stringify({
+            nama_user: user.name || "Pengguna",
+            periode: summary.periodLabel,
+            total_gaji: summary.salary,
+            total_pengeluaran: summary.totalExpense,
+            sisa_surplus: summary.surplus,
+            kantong: pocketsData,
+        }, null, 2);
+        const aiResult = await reasoningAiService.generateBudgetSuggestion(userContextJson, {
+            userId: user.id,
+            feature: "monthly_reset_reasoning",
+        });
+        if (aiResult) {
+            // Simpan ke database AISuggestion (kolom baru untuk MONTHLY_RESET)
+            try {
+                const cycle = getCycleBoundaries(new Date(), payday);
+                await prisma.aISuggestion.create({
+                    data: {
+                        userId: user.id,
+                        type: "MONTHLY_RESET",
+                        suggestion_text: aiResult.insight_text,
+                        is_approved: false,
+                        period: cycle.prevPeriod instanceof Date
+                            ? cycle.prevPeriod.toISOString().split("T")[0] // "YYYY-MM-DD"
+                            : String(cycle.prevPeriod),
+                        proposed_pockets: aiResult.proposed_pockets,
+                    },
+                });
+                logger.info(`[MonthlyReset] ✅ AI suggestion tersimpan ke database untuk ${user.id}`);
+                aiSuggestionNote = `\n\n✨ *Kenin sudah menyusun saran alokasi budget bulan depanmu!*\nCek Dashboard web Kainest untuk menerapkan saran tersebut hanya dengan 1-klik.`;
+            }
+            catch (dbErr) {
+                logger.error("[MonthlyReset] Gagal simpan AI suggestion ke DB", { error: dbErr.message });
+            }
+        }
+    }
+    // ── Bagian 2: Generate insight teks standar (groqService lama, semua user) ──
     const aiInsight = await generateAiInsight(summary, user.id);
-    // Susun pesan blast
+    // ── Bagian 3: Tambahan pesan untuk user PASIF ──────────────────────────────
+    const passiveNote = isPassive
+        ? `\n\n_Sepertinya kamu kurang rajin mencatat pengeluaranmu akhir-akhir ini, padahal itu wajib loo 🥺 Yuk mulai catat lagi agar keuanganmu lebih sehat!_`
+        : "";
+    // ── Bagian 4: Setoran Tabungan Otomatis ────────────────────────────────────
+    let autoSavingNote = "";
+    const activeSavings = await prisma.savingGoal.findMany({
+        where: { userId: user.id, status: "ACTIVE", monthlyAllocation: { gt: 0 } }
+    });
+    if (activeSavings.length > 0) {
+        if (summary.surplus < 0) {
+            autoSavingNote = `\n\n⚠️ *Setoran Otomatis Dibatalkan*\nKarena bulan lalu kamu overbudget (sisa uang minus), sistem menunda setoran tabungan otomatis bulan ini agar *cashflow* kamu tetap aman.`;
+        }
+        else {
+            let savedTotal = 0;
+            const cycle = getCycleBoundaries(new Date(), payday);
+            for (const saving of activeSavings) {
+                // Cek apakah sudah pernah disetor otomatis di periode INI
+                const existingAuto = await prisma.savingContribution.findFirst({
+                    where: { goalId: saving.id, period: cycle.period, source: "AUTO_CYCLE" }
+                });
+                if (!existingAuto) {
+                    await prisma.savingContribution.create({
+                        data: {
+                            goalId: saving.id,
+                            userId: user.id,
+                            amount: saving.monthlyAllocation,
+                            source: "AUTO_CYCLE",
+                            note: "Setoran Otomatis Awal Siklus",
+                            date: new Date(),
+                            period: cycle.period,
+                        }
+                    });
+                    savedTotal += saving.monthlyAllocation;
+                }
+            }
+            if (savedTotal > 0) {
+                autoSavingNote = `\n\n🎯 *Setoran Tabungan Otomatis Berhasil!*\nSistem telah menyisihkan ${formatIDR(savedTotal)} ke target tabunganmu.`;
+            }
+        }
+    }
+    // ── Susun pesan blast ──────────────────────────────────────────────────────
     const surplusLine = summary.surplus > 0
         ? `💰 *Sisa Saldo:* ${formatIDR(summary.surplus)} ✨\n\n_(Ketik *!keep* jika mau sisa ini ditambahkan ke bulan depan)_`
         : summary.surplus < 0
@@ -158,10 +247,10 @@ ${surplusLine}
 ${summary.pocketsDetail || "_(Tidak ada data kantong)_"}
 
 🤖 *Kata Kenin AI:*
-${aiInsight}
+${aiInsight}${aiSuggestionNote}${passiveNote}${autoSavingNote}
 ━━━━━━━━━━━━━━━━━━━━
 💡 Ketik *!help* untuk bantuan.`;
-    // Kirim ke semua grup aktif user
+    // ── Kirim ke semua grup aktif user ────────────────────────────────────────
     if (!user.botActiveGroups.length) {
         logger.warn(`[MonthlyReset] User ${user.id} tidak memiliki grup aktif, blast dilewati.`);
         return;

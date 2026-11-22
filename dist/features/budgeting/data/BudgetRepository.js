@@ -97,6 +97,17 @@ export const budgetRepository = {
             const now = new Date();
             const { period: currentPeriod } = getCycleBoundaries(now, payday);
             const isPastPeriod = period.getTime() < currentPeriod.getTime();
+            const isFuturePeriod = period.getTime() > currentPeriod.getTime();
+            // =========================================================
+            // ⏳ FUTURE PERIOD GUARDRAIL
+            // Jika transaksi berada di periode masa depan (misal: cicilan),
+            // JANGAN buat riwayat bulanan (snapshot gaji/budget) SEKARANG.
+            // Riwayat akan dibuat otomatis ketika bulan tersebut benar-benar tiba.
+            // =========================================================
+            if (isFuturePeriod) {
+                console.log(`⏳ [Write-Time Sync - FUTURE] Mencegah pembuatan riwayat prematur untuk siklus masa depan: ${period.toISOString()}`);
+                return;
+            }
             let history = await this.findMonthlyHistory(userId, period);
             if (!history) {
                 // Jika history tidak ada, buat baru berdasarkan konfigurasi pocket user saat ini.

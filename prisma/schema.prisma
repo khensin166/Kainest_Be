@@ -1,5 +1,6 @@
 generator client {
   provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
@@ -772,3 +773,220 @@ model UserGroup {
   @@schema("kainest")
 }
 
+// ==========================================
+// 📋 PORTFOLIO FEATURE — Form & Inquiry
+// Model ini digunakan oleh aplikasi Portofolio Kenan.
+// Migrasi dikelola dari repositori Kainest (satu database).
+// ==========================================
+
+/// Konfigurasi/template pertanyaan form Discovery Portfolio.
+/// Kolom `schema` menyimpan array JSON dari step/pertanyaan yang bisa
+/// diubah dari Admin Panel tanpa perlu mengubah skema database.
+model PortfolioFormConfig {
+  id        String   @id @default(uuid())
+  name      String   // Misal: "Kenan Discovery Form"
+  isActive  Boolean  @default(true)
+  /// JSON Array of FormStep: [{ step, title, subtitle?, questions: [...] }]
+  schema    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inquiries PortfolioInquiry[]
+
+  @@index([isActive])
+  @@schema("kainest")
+}
+
+/// Data leads / inquiry dari pengisian Discovery Form Portfolio.
+/// Kolom `answers` menyimpan semua jawaban sebagai key-value JSON object.
+model PortfolioInquiry {
+  id      String @id @default(uuid())
+  formId  String
+  form    PortfolioFormConfig @relation(fields: [formId], references: [id])
+
+  /// Di-ekstrak dari answers["name"] untuk kemudahan pencarian & filter
+  name    String
+  /// Di-ekstrak dari answers["email"]
+  email   String
+  /// Di-ekstrak dari answers["phone"] (opsional)
+  phone   String?
+
+  /// Semua jawaban form disimpan di sini sebagai JSON object.
+  /// Contoh: { "service": "E-Commerce", "budget": "5-15jt", "name": "Budi" }
+  answers Json
+
+  /// Status pengelolaan lead
+  status    String   @default("NEW") // NEW | CONTACTED | DEAL | REJECTED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([email])
+  @@index([createdAt(sort: Desc)])
+  @@schema("kainest")
+}
+
+// ==========================================
+// 🎓 BINUS LMS ACADEMIC CALENDAR & REMINDER
+// ==========================================
+
+enum AcademicEventCategory {
+  ASSIGNMENT          // PAS:
+  GROUP_ASSIGNMENT    // TAS:
+  QUIZ                // Quiz: / QIZ:
+  VIRTUAL_CONFERENCE  // Virtual Class:
+  LECTURE_WEEKLY      // Online: LEC
+  OTHER
+  @@schema("kainest")
+}
+
+enum ReminderChannel {
+  WHATSAPP
+  APP_NOTIFICATION
+  EMAIL
+  @@schema("kainest")
+}
+
+enum ScheduledReminderStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+  SKIPPED
+  @@schema("kainest")
+}
+
+enum CalendarSyncStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL_SUCCESS
+  SKIPPED_UNCHANGED
+  FAILED
+  @@schema("kainest")
+}
+
+model CalendarEvent {
+  id               String                @id @default(uuid()) @db.Uuid
+  eventId          String                @unique
+  subject          String
+  courseName       String?
+  classCode        String?
+  deliveryMode     String?
+  sessionNumber    Int?
+  activityLabel    String?
+  category         AcademicEventCategory
+  startUtc         DateTime              @db.Timestamptz(6)
+  endUtc           DateTime              @db.Timestamptz(6)
+  /// Acuan waktu reminder: endUtc untuk ASSIGNMENT/GROUP_ASSIGNMENT/QUIZ, startUtc untuk VIRTUAL_CONFERENCE/LECTURE_WEEKLY
+  referenceTimeUtc DateTime              @db.Timestamptz(6)
+  lastModifiedUtc  DateTime              @db.Timestamptz(6)
+  bodyHtml         String?               @db.Text
+  activityUrl      String?               @db.Text
+  webLink          String?               @db.Text
+  isMuted          Boolean               @default(false)
+  createdAt        DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime              @updatedAt @db.Timestamptz(6)
+
+  scheduledReminders ScheduledReminder[]
+  notificationLogs   AcademicNotificationLog[]
+
+  @@index([category, referenceTimeUtc])
+  @@index([endUtc])
+  @@index([startUtc])
+  @@index([lastModifiedUtc])
+  @@schema("kainest")
+}
+
+model ReminderRule {
+  id              String                @id @default(uuid()) @db.Uuid
+  category        AcademicEventCategory
+  /// Negatif = sebelum waktu acuan: -10080 (H-7), -4320 (H-3), -1440 (H-1), -180 (H-3 jam), -30 (H-30 menit)
+  offsetMinutes   Int
+  label           String
+  channel         ReminderChannel       @default(WHATSAPP)
+  isActive        Boolean               @default(true)
+  targetRecipient String?
+  createdAt       DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime              @updatedAt @db.Timestamptz(6)
+
+  scheduledReminders ScheduledReminder[]
+
+  @@unique([category, offsetMinutes, channel])
+  @@index([category, isActive])
+  @@schema("kainest")
+}
+
+model ScheduledReminder {
+  id              String                  @id @default(uuid()) @db.Uuid
+  calendarEventId String                  @db.Uuid
+  ruleId          String                  @db.Uuid
+  eventVersionUtc DateTime                @db.Timestamptz(6)
+  scheduledAt     DateTime                @db.Timestamptz(6)
+  channel         ReminderChannel         @default(WHATSAPP)
+  recipient       String
+  status          ScheduledReminderStatus @default(PENDING)
+  retryCount      Int                     @default(0)
+  lockedAt        DateTime?               @db.Timestamptz(6)
+  lastError       String?                 @db.Text
+  sentAt          DateTime?               @db.Timestamptz(6)
+  createdAt       DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime                @updatedAt @db.Timestamptz(6)
+
+  calendarEvent    CalendarEvent             @relation(fields: [calendarEventId], references: [id], onDelete: Cascade)
+  rule             ReminderRule              @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  notificationLogs AcademicNotificationLog[]
+
+  /// Constraint idempotensi utama: 1 event + 1 rule + 1 channel tidak boleh terduplikasi
+  @@unique([calendarEventId, ruleId, channel])
+  @@index([status, scheduledAt])
+  @@index([status, lockedAt])
+  @@index([calendarEventId])
+  @@schema("kainest")
+}
+
+model AcademicNotificationLog {
+  id                  String          @id @default(uuid()) @db.Uuid
+  scheduledReminderId String          @db.Uuid
+  calendarEventId     String          @db.Uuid
+  channel             ReminderChannel @default(WHATSAPP)
+  recipient           String
+  attemptNumber       Int             @default(1)
+  deliveryStatus      String          // "SENT" | "FAILED"
+  payloadPreview      String          @db.Text
+  providerResponse    String?         @db.Text
+  errorMessage        String?         @db.Text
+  sentAt              DateTime        @default(now()) @db.Timestamptz(6)
+
+  scheduledReminder ScheduledReminder @relation(fields: [scheduledReminderId], references: [id], onDelete: Cascade)
+  calendarEvent     CalendarEvent     @relation(fields: [calendarEventId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduledReminderId, attemptNumber])
+  @@index([calendarEventId])
+  @@index([sentAt(sort: Desc)])
+  @@schema("kainest")
+}
+
+model CalendarSyncLog {
+  id                   String             @id @default(uuid()) @db.Uuid
+  sourceFile           String
+  fileChecksum         String?
+  status               CalendarSyncStatus @default(RUNNING)
+  totalRowsRead        Int                @default(0)
+  rowsDedupedInFile    Int                @default(0)
+  eventsInserted       Int                @default(0)
+  eventsUpdated        Int                @default(0)
+  eventsSkipped        Int                @default(0)
+  eventsFailed         Int                @default(0)
+  remindersCreated     Int                @default(0)
+  remindersRescheduled Int                @default(0)
+  archivedPath         String?
+  errorSummary         Json?
+  startedAt            DateTime           @default(now()) @db.Timestamptz(6)
+  finishedAt           DateTime?          @db.Timestamptz(6)
+
+  @@index([startedAt(sort: Desc)])
+  @@index([fileChecksum])
+  @@schema("kainest")
+}
