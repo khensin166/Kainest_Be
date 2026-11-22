@@ -9,4 +9,4 @@ logs/
 *.log
 
 # Local academic calendar staging & archive data
-data/
+/data/
