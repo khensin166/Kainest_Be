@@ -13,6 +13,13 @@ export class AdminRepository {
                 role: true,
                 banned: true,
                 permissions: true,
+                userGroupId: true,
+                userGroup: {
+                    select: {
+                        id: true,
+                        name: true,
+                    }
+                },
                 profile: {
                     select: {
                         avatarUrl: true,
@@ -38,7 +45,37 @@ export class AdminRepository {
                 email: true,
                 role: true,
                 banned: true,
-                permissions: true
+                permissions: true,
+                userGroupId: true,
+                userGroup: {
+                    select: {
+                        id: true,
+                        name: true,
+                    }
+                }
+            }
+        });
+    }
+    /**
+     * Mengambil data lengkap user yang dibutuhkan untuk proses reset bulanan
+     */
+    async getUserForReset(userId) {
+        return prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                name: true,
+                payday: true,
+                waBotConfig: {
+                    select: {
+                        baseUrl: true,
+                    }
+                },
+                botActiveGroups: {
+                    select: {
+                        groupId: true,
+                    }
+                }
             }
         });
     }

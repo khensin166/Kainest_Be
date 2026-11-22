@@ -14,6 +14,7 @@ services:
     # Optional: If you have persistent files like logs or local uploads
     volumes:
       - kainest_be_logs:/app/logs
+      - kainest_be_academic_data:/app/data/academic
     logging:
       driver: loki
       options:
@@ -32,3 +33,4 @@ networks:
 
 volumes:
   kainest_be_logs:
+  kainest_be_academic_data:

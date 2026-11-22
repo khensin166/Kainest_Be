@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { authMiddleware } from "../../auth/presentation/authMiddleware.js";
 import { createTransactionController, getBudgetStatusController, getCategoriesController, createCustomCategoryController, setupBudgetController, getSummaryController, getAiAdviceController, seedCategoriesController, evaluateBudgetController, getTrendController, getTransactionsController, getTransactionDetailController, updateTransactionController, deleteTransactionController, 
 // Pocket Controllers
-getPocketsController, upsertPocketController, deletePocketController, bulkSetupPocketsController, updateKeywordsController, classifyTransactionController, getMonthlyHistoryController, } from "../services/budgetController.js";
+getPocketsController, upsertPocketController, deletePocketController, bulkSetupPocketsController, updateKeywordsController, classifyTransactionController, getMonthlyHistoryController, getAiSuggestionController, applyAiSuggestionController, dismissAiSuggestionController, } from "../services/budgetController.js";
 export const budgetRoute = new Hono();
 // Middleware Auth (Wajib Login)
 budgetRoute.use("*", authMiddleware);
@@ -57,3 +57,12 @@ budgetRoute.post("/classify", classifyTransactionController);
 // ==========================================
 // GET: Riwayat keuangan bulanan user
 budgetRoute.get("/history", getMonthlyHistoryController);
+// ==========================================
+// 🧠 AI SUGGESTION ROUTES
+// ==========================================
+// GET: Ambil saran AI budget terbaru yang belum di-apply
+budgetRoute.get("/ai-suggestion", getAiSuggestionController);
+// POST: 1-Click Apply — terapkan semua saran AI ke kantong
+budgetRoute.post("/ai-suggestion/apply", applyAiSuggestionController);
+// POST: Tolak/Abaikan saran AI
+budgetRoute.post("/ai-suggestion/dismiss", dismissAiSuggestionController);

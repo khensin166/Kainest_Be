@@ -6,7 +6,17 @@ import { addBotTransactionController } from "../services/WaBotTransactionControl
 import { gowaWebhookController } from "../services/GowaWebhookController.js";
 import { getActiveGroupsController, blastMessageController } from "../services/BlastController.js";
 import { proxyGetDevices, proxyCreateDevice, proxyDeleteDevice, proxyLogoutDevice, proxyGetDeviceLogin } from "../services/DeviceProxyController.js";
+import { rateLimiter } from 'hono-rate-limiter';
 export const wabotRoute = new Hono();
+// Rate limiter khusus webhook (100 request per menit)
+const webhookRateLimiter = rateLimiter({
+    windowMs: 60 * 1000, // 1 menit
+    limit: 100, // Limit 100 request
+    standardHeaders: "draft-6",
+    keyGenerator: (c) => {
+        return c.req.header('x-forwarded-for') || c.env?.REMOTE_ADDR || "anonymous";
+    }
+});
 // ==========================================
 // Rute Konfigurasi User (Perlu JWT Login)
 // ==========================================
@@ -23,12 +33,12 @@ wabotRoute.post("/info", botAuthMiddleware, saveBotInfoController);
 // ==========================================
 // Rute Webhook dari n8n/Bot (Perlu API Key)
 // ==========================================
-wabotRoute.post("/transactions", botAuthMiddleware, addBotTransactionController);
+wabotRoute.post("/transactions", webhookRateLimiter, botAuthMiddleware, addBotTransactionController);
 // ==========================================
 // Rute Webhook dari GOWA
 // ==========================================
 // Endpoint ini yang akan dipanggil oleh GOWA setiap ada pesan masuk
-wabotRoute.post("/webhook/gowa", gowaWebhookController);
+wabotRoute.post("/webhook/gowa", webhookRateLimiter, gowaWebhookController);
 // ==========================================
 // Rute Blast Message & Active Groups (Admin Only)
 // ==========================================

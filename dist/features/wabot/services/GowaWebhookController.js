@@ -77,6 +77,35 @@ async function sendPresenceViaGowa(phone, action) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Controller Utama
 // ─────────────────────────────────────────────────────────────────────────────
+import { z } from "zod";
+// Zod Schema untuk Sanitasi Input GOWA Webhook
+const gowaWebhookSchema = z.object({
+    event: z.string().optional(),
+    Event: z.string().optional(),
+    device_id: z.string().optional(),
+    payload: z.object({
+        id: z.string().optional(),
+        from: z.string().optional(),
+        body: z.string().optional(),
+        chat_id: z.string().optional(),
+        is_from_me: z.boolean().optional(),
+        timestamp: z.union([z.string(), z.number()]).optional(),
+        audio: z.any().optional(),
+        original_media_type: z.string().optional(),
+        type: z.string().optional(),
+        video_note: z.any().optional(),
+    }).passthrough().optional(),
+    sender: z.string().optional(),
+    from: z.string().optional(),
+    message_id: z.string().optional(),
+    MessageID: z.string().optional(),
+    text: z.string().optional(),
+    message: z.string().optional(),
+    is_from_me: z.boolean().optional(),
+    IsFromMe: z.boolean().optional(),
+    group_id: z.string().optional(),
+    GroupID: z.string().optional()
+}).passthrough();
 export const gowaWebhookController = async (c) => {
     const startTime = Date.now();
     let senderPhone = "";
@@ -84,8 +113,9 @@ export const gowaWebhookController = async (c) => {
     const correlationId = c.get("correlationId");
     try {
         // 1. Parsing payload dari GOWA v8.9
-        // Struktur baru: { event, device_id, payload: { id, from, body, chat_id, is_from_me, timestamp } }
-        const payload = await c.req.json();
+        const rawPayload = await c.req.json();
+        // Zod Validation (Sanitasi Input)
+        const payload = gowaWebhookSchema.parse(rawPayload);
         const data = payload.payload || {};
         const event = payload.event || payload.Event || "";
         const senderRaw = data.from || payload.sender || payload.from || "";
@@ -315,6 +345,13 @@ export const gowaWebhookController = async (c) => {
         return c.json({ success: true, status: "processing_in_background" }, 200);
     }
     catch (error) {
+        if (error instanceof z.ZodError) {
+            logger.warn("GowaWebhookController validation error", {
+                sender: senderPhone,
+                issues: error.issues,
+            });
+            return c.json({ success: false, message: "Invalid payload format" }, 400);
+        }
         logger.error("GowaWebhookController unhandled error", {
             sender: senderPhone,
             error: error.message,
