@@ -6,13 +6,13 @@ import { academicReminderDispatcher } from "./AcademicReminderDispatcher.js";
 import { academicSyncService } from "./AcademicSyncService.js";
 
 const ENABLE_SCHEDULER = process.env.ENABLE_SCHEDULER === "true";
-const DEFAULT_SYNC_CRON = "*/30 * * * *"; // Setiap 30 menit
+const DEFAULT_SYNC_CRON = "0 */6 * * *"; // Setiap 6 jam
 const DEFAULT_DISPATCH_CRON = "*/5 * * * *"; // Setiap 5 menit
 
 /**
  * Mengaktifkan scheduler BINUS LMS Academic Calendar (hanya jika ENABLE_SCHEDULER=true):
  * 1. Startup recovery: seed aturan default (termasuk H-7) & pulihkan job PROCESSING yang menggantung.
- * 2. Cron Sync + Housekeeping berkala (default setiap 30 menit).
+ * 2. Cron Sync + Housekeeping berkala (default setiap 6 jam).
  * 3. Cron DB-backed Dispatcher setiap 5 menit (tahan container restart).
  */
 export function startAcademicCalendarScheduler(): void {

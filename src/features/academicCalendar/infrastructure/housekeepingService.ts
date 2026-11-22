@@ -3,7 +3,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { logger } from "../../../infrastructure/logger/logger.js";
 
-const DEFAULT_RETENTION_DAYS = 30;
+const DEFAULT_RETENTION_DAYS = 2;
 const MS_PER_DAY = 86_400_000;
 
 export interface HousekeepingConfig {
@@ -143,7 +143,7 @@ export class HousekeepingService {
   }
 
   /**
-   * Menghapus file arsip yang sudah melewati batas retensi (default > 30 hari)
+   * Menghapus file arsip yang sudah melewati batas retensi (default > 2 hari)
    * serta membersihkan folder bulan (YYYY-MM) yang kosong.
    */
   async pruneOldArchives(now: Date = new Date()): Promise<PruneResult> {

@@ -161,7 +161,7 @@ export class AcademicSyncService {
                     }
                 }
             }
-            // 9. Housekeeping setelah DB commit selesai: arsipkan staging & bersihkan arsip lama (> 30 hari)
+            // 9. Housekeeping setelah DB commit selesai: arsipkan staging & bersihkan arsip lama (> 2 hari)
             archivedPath = await this.housekeeping.archiveStagingFile(stagingPath, now);
             await this.housekeeping.pruneOldArchives(now);
             const finalStatus = eventsFailed > 0 ? "PARTIAL_SUCCESS" : "SUCCESS";
