@@ -2,7 +2,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { logger } from "../../../infrastructure/logger/logger.js";
-const DEFAULT_RETENTION_DAYS = 30;
+const DEFAULT_RETENTION_DAYS = 2;
 const MS_PER_DAY = 86400000;
 export function getDefaultHousekeepingConfig() {
     const dataDir = process.env.ACADEMIC_DATA_DIR || path.resolve(process.cwd(), "data", "academic");
@@ -110,7 +110,7 @@ export class HousekeepingService {
         return cleaned;
     }
     /**
-     * Menghapus file arsip yang sudah melewati batas retensi (default > 30 hari)
+     * Menghapus file arsip yang sudah melewati batas retensi (default > 2 hari)
      * serta membersihkan folder bulan (YYYY-MM) yang kosong.
      */
     async pruneOldArchives(now = new Date()) {

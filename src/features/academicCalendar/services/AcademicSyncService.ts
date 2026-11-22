@@ -20,6 +20,7 @@ import {
 import { HousekeepingService } from "../infrastructure/housekeepingService.js";
 
 const DEFAULT_BATCH_SIZE = 30;
+const DEFAULT_DB_RETENTION_DAYS = 30;
 const STAGING_FILENAME = "binus-lms-events.xlsx";
 
 function chunkArray<T>(items: T[], size: number): T[][] {
@@ -65,6 +66,14 @@ export class AcademicSyncService {
     return process.env.ACADEMIC_MUTE_WEEKLY_LECTURE !== "false";
   }
 
+  private getDbRetentionDays(): number {
+    const parsed = Number.parseInt(
+      process.env.ACADEMIC_DB_RETENTION_DAYS || String(DEFAULT_DB_RETENTION_DAYS),
+      10
+    );
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DB_RETENTION_DAYS;
+  }
+
   /**
    * Menjalankan siklus lengkap:
    * Auto-Download ke staging -> SHA-256 check -> Parse & Dedup -> Normalize ->
@@ -104,9 +113,11 @@ export class AcademicSyncService {
 
       // 3. Hitung checksum SHA-256 & cek apakah file identik dengan sync sukses terakhir
       fileChecksum = await computeFileSha256(stagingPath);
+      const dbRetentionDays = this.getDbRetentionDays();
       if (!options.force && (await this.repo.hasSuccessfulSyncWithChecksum(fileChecksum))) {
         archivedPath = await this.housekeeping.archiveStagingFile(stagingPath);
         await this.housekeeping.pruneOldArchives();
+        await this.repo.pruneOldDatabaseRecords(dbRetentionDays);
 
         await this.repo.finalizeSyncLog(syncLog.id, {
           status: "SKIPPED_UNCHANGED",
@@ -146,21 +157,27 @@ export class AcademicSyncService {
       rowsDedupedInFile = dedup.duplicatesRemoved;
       errors.push(...dedup.invalidRows);
 
-      // 6. Normalisasi & validasi per baris
+      // 6. Normalisasi & validasi per baris (abaikan event lama yang sudah melewati retensi DB)
       const normalizedEvents: NormalizedCalendarEvent[] = [];
       const muteWeeklyLecture = this.isWeeklyLectureMuted();
+      const now = new Date();
+      const dbRetentionCutoffMs = now.getTime() - dbRetentionDays * 86_400_000;
 
       for (const row of dedup.dedupedRows) {
         const res = normalizeEventRow(row, { muteWeeklyLecture });
         if (res.error) {
           errors.push(res.error);
         } else if (res.event) {
+          if (res.event.endUtc.getTime() < dbRetentionCutoffMs) {
+            eventsSkipped++;
+            continue;
+          }
           normalizedEvents.push(res.event);
         }
       }
       eventsFailed = errors.length;
 
-      // 7. Ambil rules & target WA pribadi
+      // 7. Ambil rules & target WA
       const rules = await this.repo.getAllRules();
       const targetRecipient = this.getTargetRecipient();
       if (!targetRecipient) {
@@ -172,7 +189,6 @@ export class AcademicSyncService {
       // 8. Batch upsert ke PostgreSQL (maks 30 baris per batch agar event loop & RAM 256MB aman)
       const batchSize = this.getBatchSize();
       const batches = chunkArray(normalizedEvents, batchSize);
-      const now = new Date();
 
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
@@ -218,9 +234,10 @@ export class AcademicSyncService {
         }
       }
 
-      // 9. Housekeeping setelah DB commit selesai: arsipkan staging & bersihkan arsip lama (> 30 hari)
+      // 9. Housekeeping setelah DB commit selesai: arsipkan staging, bersihkan arsip lama (> 2 hari), & bersihkan DB (> 30 hari)
       archivedPath = await this.housekeeping.archiveStagingFile(stagingPath, now);
       await this.housekeeping.pruneOldArchives(now);
+      await this.repo.pruneOldDatabaseRecords(dbRetentionDays, now);
 
       const finalStatus: CalendarSyncStatus =
         eventsFailed > 0 ? "PARTIAL_SUCCESS" : "SUCCESS";
