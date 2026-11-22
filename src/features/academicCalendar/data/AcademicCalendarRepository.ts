@@ -23,6 +23,15 @@ export interface BatchUpsertSummary {
   remindersRescheduled: number;
 }
 
+export interface DbHousekeepingResult {
+  retentionDays: number;
+  cutoffUtc: string;
+  deletedNotificationLogs: number;
+  deletedScheduledReminders: number;
+  deletedCalendarEvents: number;
+  deletedSyncLogs: number;
+}
+
 export class AcademicCalendarRepository {
   /**
    * Seed idempoten aturan reminder default (termasuk H-7).
@@ -526,5 +535,87 @@ export class AcademicCalendarRepository {
       orderBy: { startedAt: "desc" },
       take: limit,
     });
+  }
+
+  /**
+   * Housekeeping otomatis tabel database akademik (default retensi > 30 hari / 1 bulan):
+   * - Menghapus AcademicNotificationLog lebih lama dari retentionDays.
+   * - Menghapus ScheduledReminder yang sudah selesai (SENT/SKIPPED/CANCELLED/FAILED) lebih lama dari retentionDays.
+   * - Menghapus CalendarEvent yang endUtc-nya sudah lewat > retentionDays dan tidak punya reminder aktif.
+   * - Menghapus CalendarSyncLog lebih lama dari retentionDays (menyisakan 1 log sukses terakhir untuk cek SHA-256).
+   * - ReminderRule (master aturan) tidak pernah dihapus.
+   */
+  async pruneOldDatabaseRecords(
+    retentionDays: number = 30,
+    now: Date = new Date()
+  ): Promise<DbHousekeepingResult> {
+    const safeDays = Number.isFinite(retentionDays) && retentionDays > 0 ? retentionDays : 30;
+    const cutoff = new Date(now.getTime() - safeDays * 86_400_000);
+
+    // 1. Bersihkan log pengiriman notifikasi lama
+    const notifRes = await prisma.academicNotificationLog.deleteMany({
+      where: {
+        sentAt: { lt: cutoff },
+      },
+    });
+
+    // 2. Bersihkan scheduled reminder yang sudah selesai & lewat retensi (jangan hapus PENDING/PROCESSING)
+    const reminderRes = await prisma.scheduledReminder.deleteMany({
+      where: {
+        status: { in: ["SENT", "SKIPPED", "CANCELLED", "FAILED"] },
+        scheduledAt: { lt: cutoff },
+      },
+    });
+
+    // 3. Bersihkan event kuliah yang sudah berakhir > retentionDays dan tidak punya reminder aktif
+    const eventRes = await prisma.calendarEvent.deleteMany({
+      where: {
+        endUtc: { lt: cutoff },
+        scheduledReminders: {
+          none: {
+            status: { in: ["PENDING", "PROCESSING"] },
+          },
+        },
+      },
+    });
+
+    // 4. Bersihkan sync log lama, tetapi pertahankan 1 sync sukses terakhir agar deteksi SHA-256 tetap akurat
+    const latestSuccessSync = await prisma.calendarSyncLog.findFirst({
+      where: {
+        status: { in: ["SUCCESS", "PARTIAL_SUCCESS"] },
+      },
+      orderBy: { startedAt: "desc" },
+      select: { id: true },
+    });
+
+    const syncLogRes = await prisma.calendarSyncLog.deleteMany({
+      where: {
+        startedAt: { lt: cutoff },
+        ...(latestSuccessSync ? { id: { not: latestSuccessSync.id } } : {}),
+      },
+    });
+
+    const totalDeleted =
+      notifRes.count + reminderRes.count + eventRes.count + syncLogRes.count;
+
+    if (totalDeleted > 0) {
+      logger.info("[AcademicRepo] 🧹 Housekeeping database selesai", {
+        retentionDays: safeDays,
+        cutoffUtc: cutoff.toISOString(),
+        deletedNotificationLogs: notifRes.count,
+        deletedScheduledReminders: reminderRes.count,
+        deletedCalendarEvents: eventRes.count,
+        deletedSyncLogs: syncLogRes.count,
+      });
+    }
+
+    return {
+      retentionDays: safeDays,
+      cutoffUtc: cutoff.toISOString(),
+      deletedNotificationLogs: notifRes.count,
+      deletedScheduledReminders: reminderRes.count,
+      deletedCalendarEvents: eventRes.count,
+      deletedSyncLogs: syncLogRes.count,
+    };
   }
 }
