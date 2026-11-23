@@ -1,80 +1,218 @@
 // src/infrastructure/google/sheetClient.ts
-// Membaca data jadwal shift dari Google Spreadsheet
+// Membaca data jadwal shift & hybrid (ALTO) serta daftar Hari Libur Nasional dari Google Spreadsheet
 import { google } from "googleapis";
 import { logger } from "../logger/logger.js";
-const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY_SPREADSHEET;
-const sheets = google.sheets({
-    version: "v4",
-    auth: GOOGLE_API_KEY,
-});
+const INDONESIAN_MONTHS = {
+    JANUARI: 1,
+    FEBRUARI: 2,
+    MARET: 3,
+    APRIL: 4,
+    MEI: 5,
+    JUNI: 6,
+    JULI: 7,
+    AGUSTUS: 8,
+    SEPTEMBER: 9,
+    OKTOBER: 10,
+    NOVEMBER: 11,
+    DESEMBER: 12,
+};
+const DAY_LABELS = new Set(["sen", "sel", "rab", "kam", "jum", "sab", "min", "fungsi"]);
 /**
- * Membaca data jadwal dari Google Spreadsheet untuk bulan yang berjalan.
- * Struktur sheet: Baris 3 = header statis (Nama, PN...),
- *                 Baris 4 = header tanggal (1, 2, 3...),
- *                 Baris 5 = nama hari (Fungsi, Sab, Min...),
- *                 Baris 6+ = data user
+ * Mengonversi tanggal teks Indonesia dari tabel libur spreadsheet
+ * (misal: "25 DESEMBER 2026", "1 JANUARI 2027") ke format YYYY-MM-DD.
  */
-export const fetchShiftDataFromSheet = async () => {
-    if (!SPREADSHEET_ID || !GOOGLE_API_KEY) {
-        throw new Error("SPREADSHEET_ID atau GOOGLE_API_KEY_SPREADSHEET tidak diset di .env");
+export function parseIndonesianDateText(raw) {
+    const cleaned = String(raw || "").trim().toUpperCase().replace(/\s+/g, " ");
+    const match = cleaned.match(/^(\d{1,2})\s+([A-Z]+)\s+(\d{4})$/);
+    if (!match)
+        return null;
+    const day = Number.parseInt(match[1], 10);
+    const month = INDONESIAN_MONTHS[match[2]];
+    const year = Number.parseInt(match[3], 10);
+    if (!month || !Number.isFinite(day) || day < 1 || day > 31)
+        return null;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+/**
+ * Parser dinamis untuk isi tab Google Spreadsheet (mendukung layout lama Row 6+
+ * maupun layout baru ALTO Row 5 + tabel DAFTAR HARI LIBUR NASIONAL di bawah).
+ */
+export function parseShiftSheetValues(rows, year, month1Based) {
+    if (!rows || rows.length < 3) {
+        return { shifts: [], holidays: [] };
     }
-    const now = new Date();
-    const timeZone = "Asia/Jakarta";
-    const monthName = now
-        .toLocaleString("id-ID", { month: "long", timeZone })
-        .toUpperCase();
-    const shortYear = now.toLocaleString("id-ID", { year: "2-digit", timeZone });
-    const currentYear = now.getFullYear();
-    const currentTabName = `${monthName}'${shortYear}`;
-    const range = `${currentTabName}!A3:AZ100`;
-    logger.debug(`[SheetClient] Membaca dari tab: ${currentTabName}`);
-    try {
-        const response = await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_ID,
-            range,
-        });
-        const rows = response.data.values;
-        if (!rows || rows.length < 4) {
-            logger.warn("[SheetClient] Data sheet tidak cukup (kurang dari 4 baris).");
-            return [];
+    // 1. Deteksi baris header "Nama"
+    let staticHeaderRowIdx = -1;
+    let nameColIndex = -1;
+    for (let r = 0; r < Math.min(rows.length, 10); r++) {
+        const idx = (rows[r] || []).findIndex((cell) => String(cell ?? "").trim().toLowerCase() === "nama");
+        if (idx !== -1) {
+            staticHeaderRowIdx = r;
+            nameColIndex = idx;
+            break;
         }
-        const staticHeaderRow = rows[0]; // Sheet Row 3: "Nama", "PN"...
-        const dateHeaderRow = rows[1]; // Sheet Row 4: "1", "2", "3"...
-        // rows[2] = Sheet Row 5 = nama hari (diabaikan)
-        const userDataRows = rows.slice(3); // Sheet Row 6+
-        const nameColIndex = staticHeaderRow.findIndex((h) => String(h).trim().toLowerCase() === "nama");
-        if (nameColIndex === -1) {
-            throw new Error(`Header 'Nama' tidak ditemukan di tab '${currentTabName}'`);
+    }
+    if (staticHeaderRowIdx === -1 || nameColIndex === -1) {
+        throw new Error("Header 'Nama' tidak ditemukan di sheet.");
+    }
+    // 2. Deteksi baris tanggal (mengandung angka "1", "2", "3")
+    let dateHeaderRowIdx = -1;
+    for (let r = staticHeaderRowIdx; r < Math.min(rows.length, staticHeaderRowIdx + 4); r++) {
+        const row = rows[r] || [];
+        const has1 = row.some((c) => String(c ?? "").trim() === "1");
+        const has2 = row.some((c) => String(c ?? "").trim() === "2");
+        if (has1 && has2) {
+            dateHeaderRowIdx = r;
+            break;
         }
-        const dateStartIndex = dateHeaderRow.findIndex((h) => String(h).trim() === "1");
-        if (dateStartIndex === -1) {
-            throw new Error(`Header tanggal '1' tidak ditemukan di tab '${currentTabName}'`);
-        }
-        const allShifts = [];
-        for (const row of userDataRows) {
-            const userName = row[nameColIndex];
-            if (!userName || userName.trim() === "")
-                continue;
-            for (let colIndex = dateStartIndex; colIndex < dateHeaderRow.length; colIndex++) {
-                const day = dateHeaderRow[colIndex];
-                const shiftType = row[colIndex];
-                if (day && !isNaN(parseInt(day)) && shiftType && shiftType.trim() !== "") {
-                    // Buat tanggal lengkap dalam format YYYY-MM-DD
-                    const dateStr = `${currentYear}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(parseInt(day)).padStart(2, "0")}`;
-                    allShifts.push({
-                        name: userName.trim(),
-                        date: dateStr,
-                        shift_type: shiftType.trim(),
-                    });
-                }
+    }
+    if (dateHeaderRowIdx === -1) {
+        throw new Error("Baris header tanggal (1, 2, 3...) tidak ditemukan di sheet.");
+    }
+    // Ambil hanya kolom tanggal valid (1..31) secara berurutan, berhenti sebelum kolom Rekap/Total
+    const dateHeaderRow = rows[dateHeaderRowIdx] || [];
+    const dateColumns = [];
+    let startedDates = false;
+    for (let col = 0; col < dateHeaderRow.length; col++) {
+        const raw = String(dateHeaderRow[col] ?? "").trim();
+        const parsed = /^\d{1,2}$/.test(raw) ? Number.parseInt(raw, 10) : NaN;
+        if (!startedDates) {
+            if (parsed === 1) {
+                startedDates = true;
+                dateColumns.push({ colIndex: col, day: 1 });
             }
         }
-        logger.debug(`[SheetClient] Berhasil membaca ${allShifts.length} data shift.`);
-        return allShifts;
+        else {
+            if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 31) {
+                dateColumns.push({ colIndex: col, day: parsed });
+            }
+            else {
+                // Berhenti begitu melewati kolom tanggal (masuk area "Total WFO", dll.)
+                break;
+            }
+        }
     }
-    catch (error) {
-        logger.error("[SheetClient] Gagal membaca Spreadsheet", { error: error.message });
-        throw error;
+    if (dateColumns.length === 0) {
+        throw new Error("Kolom tanggal 1..31 tidak valid.");
     }
+    // 3. Ekstrak baris data user (mulai tepat setelah baris tanggal)
+    const shifts = [];
+    const firstDateCol = dateColumns[0].colIndex;
+    const monthStr = String(month1Based).padStart(2, "0");
+    for (let r = dateHeaderRowIdx + 1; r < rows.length; r++) {
+        const row = rows[r] || [];
+        const firstNonEmpty = row.find((c) => String(c ?? "").trim() !== "");
+        if (!firstNonEmpty) {
+            // Baris kosong setelah sudah dapat minimal 1 user menandakan akhir tabel jadwal
+            if (shifts.length > 0)
+                break;
+            continue;
+        }
+        const firstUpper = String(firstNonEmpty).trim().toUpperCase();
+        if (firstUpper.startsWith("KETERANGAN") || firstUpper.startsWith("DAFTAR HARI LIBUR")) {
+            break;
+        }
+        // Skip baris nama hari di layout lama (misal: Row 5 berisi "Fungsi", "Sab", "Min")
+        const sampleDateCell = String(row[firstDateCol] ?? "").trim().toLowerCase();
+        if (DAY_LABELS.has(sampleDateCell)) {
+            continue;
+        }
+        const userName = String(row[nameColIndex] ?? "").trim();
+        if (!userName || userName.toLowerCase() === "nama")
+            continue;
+        for (const { colIndex, day } of dateColumns) {
+            const shiftType = String(row[colIndex] ?? "").trim();
+            if (!shiftType)
+                continue;
+            const dateStr = `${year}-${monthStr}-${String(day).padStart(2, "0")}`;
+            shifts.push({
+                name: userName,
+                date: dateStr,
+                shift_type: shiftType.toUpperCase(),
+            });
+        }
+    }
+    // 4. Ekstrak tabel "DAFTAR HARI LIBUR NASIONAL & CUTI BERSAMA" di bagian bawah sheet
+    const holidays = [];
+    for (let r = dateHeaderRowIdx + 1; r < rows.length; r++) {
+        const row = rows[r] || [];
+        const tanggalCol = row.findIndex((c) => String(c ?? "").trim().toLowerCase() === "tanggal");
+        const ketCol = row.findIndex((c) => String(c ?? "").trim().toLowerCase().includes("keterangan"));
+        if (tanggalCol !== -1 && ketCol !== -1) {
+            for (let hr = r + 1; hr < rows.length; hr++) {
+                const hRow = rows[hr] || [];
+                const rawDate = String(hRow[tanggalCol] ?? "").trim();
+                const rawName = String(hRow[ketCol] ?? "").trim();
+                if (!rawDate && !rawName)
+                    break;
+                const isoDate = parseIndonesianDateText(rawDate);
+                if (isoDate && rawName) {
+                    holidays.push({ date: isoDate, name: rawName });
+                }
+            }
+            break;
+        }
+    }
+    return { shifts, holidays };
+}
+/**
+ * Mengambil jadwal & daftar hari libur nasional dari Google Spreadsheet untuk bulan target (default bulan berjalan WIB).
+ * Memprioritaskan tab `${BULAN} _ALTO'${YY}` dan fallback ke `${BULAN}'${YY}`.
+ */
+export const fetchShiftSheetWithHolidays = async (targetDate = new Date()) => {
+    const spreadsheetId = process.env.SPREADSHEET_ID;
+    const googleApiKey = process.env.GOOGLE_API_KEY_SPREADSHEET;
+    if (!spreadsheetId || !googleApiKey) {
+        throw new Error("SPREADSHEET_ID atau GOOGLE_API_KEY_SPREADSHEET tidak diset di .env");
+    }
+    const sheets = google.sheets({ version: "v4", auth: googleApiKey });
+    const timeZone = "Asia/Jakarta";
+    const monthName = targetDate
+        .toLocaleString("id-ID", { month: "long", timeZone })
+        .toUpperCase();
+    const shortYear = targetDate.toLocaleString("id-ID", { year: "2-digit", timeZone });
+    const yearNum = Number.parseInt(targetDate.toLocaleString("en-CA", { year: "numeric", timeZone }), 10);
+    const monthNum = Number.parseInt(targetDate.toLocaleString("en-CA", { month: "2-digit", timeZone }), 10);
+    const candidateTabs = [
+        `${monthName} _ALTO'${shortYear}`,
+        `${monthName}'${shortYear}`,
+    ];
+    let lastError = null;
+    for (const tabName of candidateTabs) {
+        try {
+            logger.debug(`[SheetClient] Mencoba membaca tab: ${tabName}`);
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: `${tabName}!A1:AZ100`,
+            });
+            const rows = response.data.values;
+            if (!rows || rows.length < 3) {
+                logger.warn(`[SheetClient] Data di tab '${tabName}' kosong atau kurang dari 3 baris.`);
+                continue;
+            }
+            const parsed = parseShiftSheetValues(rows, yearNum, monthNum);
+            logger.info(`[SheetClient] Berhasil membaca tab '${tabName}': ${parsed.shifts.length} jadwal, ${parsed.holidays.length} hari libur nasional.`);
+            return {
+                tabName,
+                shifts: parsed.shifts,
+                holidays: parsed.holidays,
+            };
+        }
+        catch (err) {
+            lastError = err;
+            logger.debug(`[SheetClient] Tab '${tabName}' tidak ditemukan/gagal dibaca: ${err.message}`);
+        }
+    }
+    logger.error("[SheetClient] Semua kandidat tab Spreadsheet gagal dibaca", {
+        candidateTabs,
+        error: lastError?.message,
+    });
+    throw lastError || new Error(`Tidak ada tab jadwal valid (${candidateTabs.join(", ")})`);
+};
+/**
+ * Wrapper kompatibilitas balik yang mengembalikan array ShiftRow saja.
+ */
+export const fetchShiftDataFromSheet = async (targetDate = new Date()) => {
+    const result = await fetchShiftSheetWithHolidays(targetDate);
+    return result.shifts;
 };
