@@ -29,15 +29,22 @@
           BETTER_AUTH_URL={{ better_auth_url }}
           GOOGLE_CLIENT_ID={{ google_client_id }}
           GOOGLE_CLIENT_SECRET={{ google_client_secret }}
-          GITHUB_CLIENT_ID={{ github_client_id }}
-          GITHUB_CLIENT_SECRET={{ github_client_secret }}
+          G1THUB_CLIENT_ID={{ github_client_id }}
+          G1THUB_CLIENT_SECRET={{ github_client_secret }}
+          G1THUB_TOKEN_API={{ github_token_api | default('', true) }}
+          G1THUB_RELEASES_OWNER={{ github_releases_owner | default('khensin166', true) }}
+          G1THUB_RELEASES_REPO={{ github_releases_repo | default('Kainest', true) }}
           GROQ_API_KEY={{ groq_api_key }}
+          CLOUDFLARE_WHISPER_URL={{ cloudflare_whisper_url | default('https://kainest-ear.kenan2020oke.workers.dev', true) }}
           RESEND_API_KEY={{ resend_api_key }}
           RESEND_FROM_EMAIL={{ resend_from_email }}
           CLOUDINARY_CLOUD_NAME={{ cloudinary_cloud_name }}
           CLOUDINARY_API_KEY={{ cloudinary_api_key }}
           CLOUDINARY_API_SECRET={{ cloudinary_api_secret }}
           FRONTEND_URL={{ frontend_url }}
+          CORS_ALLOWED_ORIGINS={{ cors_allowed_origins | default('', true) }}
+          AUTH_TRUSTED_ORIGINS={{ auth_trusted_origins | default('', true) }}
+          COOKIE_DOMAIN={{ cookie_domain | default('kenantomfie.com', true) }}
           GOWA_BASE_URL={{ gowa_base_url }}
           WA_BOT_API_KEY={{ gowa_api_key }}
           GOWA_DEVICE_ID={{ gowa_device_id }}
@@ -49,11 +56,13 @@
           RECEIPT_AI_TOKEN={{ receipt_ai_token }}
           RECEIPT_AI_URL={{ receipt_ai_url }}
           ACADEMIC_DATA_DIR=/app/data/academic
-          ACADEMIC_EXCEL_DOWNLOAD_URL={{ academic_excel_download_url | default('') }}
-          ACADEMIC_REMINDER_TARGET_PHONE={{ academic_reminder_target_phone | default('') }}
-          ACADEMIC_SYNC_BATCH_SIZE={{ academic_sync_batch_size | default('30') }}
-          ACADEMIC_ARCHIVE_RETENTION_DAYS={{ academic_archive_retention_days | default('30') }}
-          ACADEMIC_MUTE_WEEKLY_LECTURE={{ academic_mute_weekly_lecture | default('true') }}
+          ACADEMIC_EXCEL_DOWNLOAD_URL={{ academic_excel_download_url | default('', true) }}
+          ACADEMIC_REMINDER_TARGET_PHONE={{ academic_reminder_target_phone | default('', true) }}
+          ACADEMIC_SYNC_CRON={{ academic_sync_cron | default('0 */6 * * *', true) }}
+          ACADEMIC_SYNC_BATCH_SIZE={{ academic_sync_batch_size | default('30', true) }}
+          ACADEMIC_ARCHIVE_RETENTION_DAYS={{ academic_archive_retention_days | default('2', true) }}
+          ACADEMIC_DB_RETENTION_DAYS={{ academic_db_retention_days | default('30', true) }}
+          ACADEMIC_MUTE_WEEKLY_LECTURE={{ academic_mute_weekly_lecture | default('true', true) }}
         dest: "{{ project_dir }}/.env"
         mode: '0600'
       no_log: true

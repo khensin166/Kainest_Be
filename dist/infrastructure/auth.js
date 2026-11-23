@@ -7,19 +7,24 @@ import { Resend } from "resend";
 import { getResetPasswordEmailHtml } from "./email/templates/resetPasswordTemplate.js";
 const isLocal = process.env.NODE_ENV !== "production" && (!process.env.BETTER_AUTH_URL || process.env.BETTER_AUTH_URL.includes("localhost"));
 const resend = new Resend(process.env.RESEND_API_KEY);
+const DEFAULT_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "https://staging.kainest.kenantomfie.site",
+    "https://kainest.kenantomfie.site",
+    "https://staging.kainest.be.kenantomfie.site",
+    "https://staging.kainest.kenantomfie.com",
+    "https://kainest.kenantomfie.com",
+    "https://staging.kainest.be.kenantomfie.com",
+    "https://kainest.be.kenantomfie.com",
+    "https://staging.kainest-be.v.kenantomfie.com",
+    "https://kainest-be.v.kenantomfie.com",
+];
+const trustedOrigins = process.env.AUTH_TRUSTED_ORIGINS
+    ? process.env.AUTH_TRUSTED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
+    : DEFAULT_TRUSTED_ORIGINS;
+const cookieDomain = process.env.COOKIE_DOMAIN || "kenantomfie.com";
 export const auth = betterAuth({
-    trustedOrigins: [
-        "http://localhost:5173",
-        "https://staging.kainest.kenantomfie.site",
-        "https://kainest.kenantomfie.site",
-        "https://staging.kainest.be.kenantomfie.site",
-        "https://staging.kainest.kenantomfie.com",
-        "https://kainest.kenantomfie.com",
-        "https://staging.kainest.be.kenantomfie.com",
-        "https://kainest.be.kenantomfie.com",
-        "https://staging.kainest-be.v.kenantomfie.com",
-        "https://kainest-be.v.kenantomfie.com"
-    ],
+    trustedOrigins,
     database: prismaAdapter(prisma, {
         provider: "postgresql",
     }),
@@ -79,8 +84,8 @@ export const auth = betterAuth({
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         },
         github: {
-            clientId: process.env.G1THUB_CLIENT_ID,
-            clientSecret: process.env.G1THUB_CLIENT_SECRET,
+            clientId: (process.env.G1THUB_CLIENT_ID || process.env.GITHUB_CLIENT_ID),
+            clientSecret: (process.env.G1THUB_CLIENT_SECRET || process.env.GITHUB_CLIENT_SECRET),
         },
     },
     databaseHooks: {
@@ -107,7 +112,7 @@ export const auth = betterAuth({
     advanced: {
         crossSubDomainCookies: {
             enabled: !isLocal,
-            domain: isLocal ? undefined : "kenantomfie.com",
+            domain: isLocal ? undefined : cookieDomain,
         },
         defaultCookieAttributes: {
             sameSite: isLocal ? "lax" : "none",

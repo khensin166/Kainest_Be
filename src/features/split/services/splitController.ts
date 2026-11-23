@@ -4,7 +4,7 @@ import { auth } from "../../../infrastructure/auth.js";
 import { sendTextViaGowa } from "../../../utils/gowaService.js";
 
 const RECEIPT_AI_URL = process.env.RECEIPT_AI_URL || "https://receipt-ai.kenantomfie.com";
-const RECEIPT_AI_TOKEN = process.env.RECEIPT_AI_TOKEN || "dev_token_123";
+const RECEIPT_AI_TOKEN = process.env.RECEIPT_AI_TOKEN || "";
 
 /**
  * Menerima payload split bill dari frontend, mengirimnya ke AI Service (FastAPI),

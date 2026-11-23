@@ -28,9 +28,9 @@ export async function getSystemUpdatesController(c: Context) {
  */
 export async function syncGithubReleasesController(c: Context) {
   try {
-    const token = process.env.GITHUB_TOKEN;
-    const repoOwner = "khensin166";
-    const repoName = "Kainest"; // Gunakan frontend repo as source of truth for releases, or backend? We assume frontend repo "Kainest"
+    const token = process.env.G1THUB_TOKEN_API || process.env.GITHUB_TOKEN;
+    const repoOwner = process.env.G1THUB_RELEASES_OWNER || process.env.GITHUB_RELEASES_OWNER || "khensin166";
+    const repoName = process.env.G1THUB_RELEASES_REPO || process.env.GITHUB_RELEASES_REPO || "Kainest";
 
     const headers: Record<string, string> = {
       "Accept": "application/vnd.github.v3+json",

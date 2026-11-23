@@ -27,17 +27,23 @@ const app = new Hono()
 // Security Hardening: Tambahkan HTTP Security Headers
 app.use('*', secureHeaders())
 
+const DEFAULT_CORS_ORIGINS = [
+  'https://kainest.kenantomfie.site',
+  'https://kainest.kenantomfie.com',
+  'http://localhost:5173',
+  'https://staging.kainest.kenantomfie.site',
+  'https://staging.kainest.kenantomfie.com',
+  'https://gowa.kenantomfie.com',
+];
+
+const corsOrigins = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  : DEFAULT_CORS_ORIGINS;
+
 // Hanya izinkan request dari frontend Vue Anda (default Vite)
 // Gunakan CORS dengan credentials untuk session cookie
 app.use('*', cors({
-  origin: [
-    'https://kainest.kenantomfie.site', 
-    'https://kainest.kenantomfie.com',
-    'http://localhost:5173', 
-    'https://staging.kainest.kenantomfie.site', 
-    'https://staging.kainest.kenantomfie.com',
-    'https://gowa.kenantomfie.com',
-  ],
+  origin: corsOrigins,
   credentials: true,
 }))
 

@@ -5,7 +5,7 @@ import { logger } from "../logger/logger.js";
  * @returns Teks hasil transkripsi
  */
 export const transcribeAudio = async (audioBuffer) => {
-    const cfWorkerUrl = "https://kainest-ear.kenan2020oke.workers.dev";
+    const cfWorkerUrl = process.env.CLOUDFLARE_WHISPER_URL || "https://kainest-ear.kenan2020oke.workers.dev";
     logger.debug("Transcribing audio using Cloudflare Whisper...", { byteLength: audioBuffer.length });
     try {
         const cfResponse = await fetch(cfWorkerUrl, {
