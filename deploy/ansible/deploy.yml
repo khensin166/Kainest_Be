@@ -51,6 +51,7 @@
           BOT_ENV_MODE={{ bot_env_mode }}
           SPREADSHEET_ID={{ spreadsheet_id }}
           GOOGLE_API_KEY_SPREADSHEET={{ google_api_key_spreadsheet }}
+          SHIFT_REMINDER_TARGET_JID={{ shift_reminder_target_jid | default('', true) }}
           ENABLE_SCHEDULER={{ enable_scheduler }}
           GRAFANA_LOKI_URL={{ grafana_loki_url }}
           RECEIPT_AI_TOKEN={{ receipt_ai_token }}
