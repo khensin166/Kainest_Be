@@ -3,7 +3,7 @@ import { logger } from "../../../infrastructure/logger/logger.js";
 
 // URL & API Key GOWA (diambil dari .env)
 // WA_BOT_API_KEY diasumsikan sudah dalam format Base64 siap pakai (misal: a2FpemVudDpCcmVAa3Rocm91Z2gyMzIx)
-const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "https://gowa.kenantomfie.com";
+const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
 const GOWA_API_KEY = process.env.WA_BOT_API_KEY || process.env.GOWA_API_KEY || "";
 
 const getGowaHeaders = () => ({

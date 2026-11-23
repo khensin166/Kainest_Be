@@ -17,6 +17,8 @@ type ProcessBotTransactionInput = {
 };
 
 // Pesan onboarding untuk user baru yang mengirim pesan pertama kali
+const FRONTEND_URL = (process.env.FRONTEND_URL || "https://kainest.kenantomfie.com").replace(/\/+$/, "");
+const FRONTEND_HOST = FRONTEND_URL.replace(/^https?:\/\//, "");
 const HELP_FOOTER_CONST = "\n\n💡 Ketik *!help* untuk bantuan.";
 const ONBOARDING_MESSAGE = `Kamu siapanyakkkk? 👀
 
@@ -24,7 +26,7 @@ Kenalan dulu yuk! Kamu harus punya akun Kainest dan menautkan nomor WA kamu supa
 
 Ikuti langkah ini ya:
 
-1️⃣ *Daftar akun* di web *kainest.kenantomfie.com* (klik Register jika belum punya akun)
+1️⃣ *Daftar akun* di web *${FRONTEND_HOST}* (klik Register jika belum punya akun)
 2️⃣ Lengkapi data profil kamu (Nama & Nomor HP)
 3️⃣ Masuk ke menu *Profile → Pasangan*, lalu salin *Kode Tautan* kamu (formatnya: !link KODE)
 4️⃣ Buat *Grup WhatsApp baru* dan masukkan aku (bot) ke dalamnya
@@ -444,7 +446,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
       return {
         success: true, replyText: true,
         data: {
-          message: `🌐 *Website Kainest*\n\nKamu bisa mengakses dashboard Kainest di tautan berikut:\n👉 https://kainest.kenantomfie.com${HELP_FOOTER}`
+          message: `🌐 *Website Kainest*\n\nKamu bisa mengakses dashboard Kainest di tautan berikut:\n👉 ${FRONTEND_URL}${HELP_FOOTER}`
         }
       };
     }

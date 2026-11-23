@@ -10,7 +10,7 @@ import { asyncContext } from "../../../infrastructure/logger/asyncContext.js";
 // URL & API Key GOWA (diambil dari .env, isi saat deploy di VPS)
 const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
 const GOWA_API_KEY = process.env.WA_BOT_API_KEY || process.env.GOWA_API_KEY || "";
-const GOWA_DEVICE_ID = process.env.WA_BOT_DEVICE_ID || process.env.GOWA_DEVICE_ID || "079cae22-efa6-4089-8049-1d1dad483e56";
+const GOWA_DEVICE_ID = process.env.WA_BOT_DEVICE_ID || process.env.GOWA_DEVICE_ID || "";
 const STAGING_ALLOWED_NUMBERS = (process.env.STAGING_ALLOWED_NUMBERS || "")
   .split(",")
   .map((n) => n.trim())

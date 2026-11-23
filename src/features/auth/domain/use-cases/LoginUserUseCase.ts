@@ -10,6 +10,10 @@ export const loginUserUseCase = async (data: { email: string; password: string }
   const match = await bcrypt.compare(data.password, user.password)
   if (!match) return { success: false, message: 'Invalid credentials' }
 
-  const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' })
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET environment variable is not configured');
+  }
+  const token = jwt.sign({ id: user.id, email: user.email }, jwtSecret, { expiresIn: '7d' })
   return { success: true, token }
 }
