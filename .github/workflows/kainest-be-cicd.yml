@@ -148,6 +148,7 @@ jobs:
             -e "bot_env_mode=${{ vars.BOT_ENV_MODE }}" \
             -e "spreadsheet_id=${{ vars.SPREADSHEET_ID }}" \
             -e "google_api_key_spreadsheet=${{ vars.GOOGLE_API_KEY_SPREADSHEET }}" \
+            -e "shift_reminder_target_jid=${{ vars.SHIFT_REMINDER_TARGET_JID }}" \
             -e "enable_scheduler=${{ vars.ENABLE_SCHEDULER }}" \
             -e "grafana_loki_url=${{ vars.GRAFANA_LOKI_URL }}" \
             -e "receipt_ai_token=${{ vars.RECEIPT_AI_TOKEN }}" \

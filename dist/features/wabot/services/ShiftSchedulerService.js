@@ -305,9 +305,11 @@ export async function scheduleRemindersForToday() {
         const holidayTomorrowName = cachedHolidayMap.get(tomorrowStr) ?? null;
         let scheduled = 0;
         const nowWib = new Date(); // Sistem sudah dikunci ke Asia/Jakarta via Docker ENV TZ
+        const overrideTargetJid = process.env.SHIFT_REMINDER_TARGET_JID?.trim() || "";
         for (const userShift of todayShifts) {
             const user = userShift.user;
-            if (!user.phone_number)
+            const targetRecipient = overrideTargetJid || user.phone_number;
+            if (!targetRecipient)
                 continue;
             const resolvedShiftType = resolveActivityShiftType(userShift.shift_type, dayOfWeek);
             let matchingActivities = activities.filter((a) => a.shift_type === resolvedShiftType);
@@ -344,10 +346,10 @@ export async function scheduleRemindersForToday() {
                 schedule.scheduledJobs[jobName]?.cancel();
                 schedule.scheduleJob(jobName, sendAt, async () => {
                     logger.info(`[Scheduler] Mengirim pengingat ke ${user.name}`, {
-                        phone: user.phone_number,
+                        recipient: targetRecipient,
                         activity: activity.activity_name,
                     });
-                    await sendTextViaGowa(user.phone_number, message);
+                    await sendTextViaGowa(targetRecipient, message);
                     await prisma.notificationLog
                         .create({
                         data: { userId: user.id, activityId: activity.id },
