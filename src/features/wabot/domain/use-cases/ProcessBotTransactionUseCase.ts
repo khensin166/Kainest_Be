@@ -6,6 +6,7 @@ import { transcribeAudio } from "../../../../infrastructure/api/cloudflareWhispe
 import { logger } from "../../../../infrastructure/logger/logger.js";
 import { getCycleBoundaries } from "../../../../utils/cycleBoundaries.js";
 import { processUserReset } from "../../../budgeting/services/MonthlyResetCron.js";
+import { lewatiTagihan, lunasiTagihan } from "../../../plans/domain/billService.js";
 
 type ProcessBotTransactionInput = {
   type: string;
@@ -168,9 +169,10 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
         const code = `T${i + 1}`;
         let statusStr = "Belum Bayar";
         if (payment) {
-          statusStr = payment.status === "PAID" ? "✅ Lunas" : "⏩ Dilewati";
+          statusStr = payment.status === "PAID" ? "✅ Lunas siklus ini" : "⏩ Dilewati";
         }
-        return `[${code}] ${b.name} (${formatIDR(b.amount)}) — ${statusStr}`;
+        const tenorStr = b.totalInstallments ? ` [${b.paidInstallments}/${b.totalInstallments}]` : "";
+        return `[${code}] ${b.name}${tenorStr} (${formatIDR(b.amount)}) — ${statusStr}`;
       }).join("\n");
 
       return { success: true, replyText: true, data: { message: `📅 *Daftar Tagihan Aktif*\n\n${lines}\n\nKetik *!bayar <kode>* untuk melunasi.\nContoh: *!bayar T1*${HELP_FOOTER}` } };
@@ -205,45 +207,27 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
 
       if (!bill) return { success: true, replyText: true, data: { message: `❌ Tagihan dengan kode *${kode}* tidak ditemukan.${HELP_FOOTER}` } };
 
-      const existingPayment = await prisma.billPayment.findUnique({
-        where: { billId_period: { billId: bill.id, period: cycle.period } }
-      });
-
-      if (existingPayment && existingPayment.status === "PAID") {
-        return { success: true, replyText: true, data: { message: `✅ Tagihan *${bill.name}* sudah lunas di siklus ini.${HELP_FOOTER}` } };
+      // Gunakan domain service resmi agar paidInstallments, installmentNo, dan status COMPLETED otomatis konsisten dengan Web
+      const hasilBayar = await lunasiTagihan(cmdUser.id, bill.id, {}, now);
+      if (hasilBayar.success === false) {
+        return { success: true, replyText: true, data: { message: `⚠️ ${"message" in hasilBayar ? hasilBayar.message : "Gagal melunasi tagihan."}${HELP_FOOTER}` } };
       }
 
-      // Catat pengeluaran di transaction
-      const tx = await prisma.transaction.create({
-        data: {
-          userId: cmdUser.id,
-          categoryId: bill.categoryId,
-          type: "EXPENSE",
-          amount: bill.amount,
-          note: `Bayar tagihan: ${bill.name}`,
-          date: now
-        }
-      });
+      const updatedBill = hasilBayar.data.tagihan;
+      if (updatedBill.status === "COMPLETED" && updatedBill.totalInstallments != null) {
+        return {
+          success: true,
+          replyText: true,
+          data: {
+            message: `🎉 Tagihan *${bill.name}* (${updatedBill.paidInstallments}/${updatedBill.totalInstallments}) sebesar ${formatIDR(bill.amount)} berhasil dilunasi — *CICILAN LUNAS TOTAL!* 🥳${HELP_FOOTER}`,
+          },
+        };
+      }
 
-      // Upsert bill payment
-      await prisma.billPayment.upsert({
-        where: { billId_period: { billId: bill.id, period: cycle.period } },
-        create: {
-          billId: bill.id,
-          userId: cmdUser.id,
-          period: cycle.period,
-          status: "PAID",
-          paidAmount: bill.amount,
-          transactionId: tx.id
-        },
-        update: {
-          status: "PAID",
-          paidAmount: bill.amount,
-          transactionId: tx.id
-        }
-      });
-
-      return { success: true, replyText: true, data: { message: `✅ Tagihan *${bill.name}* berhasil dilunasi sebesar ${formatIDR(bill.amount)}!${HELP_FOOTER}` } };
+      const tenorInfo = updatedBill.totalInstallments != null
+        ? ` (angsuran ${updatedBill.paidInstallments}/${updatedBill.totalInstallments})`
+        : "";
+      return { success: true, replyText: true, data: { message: `✅ Tagihan *${bill.name}*${tenorInfo} berhasil dilunasi sebesar ${formatIDR(bill.amount)}!${HELP_FOOTER}` } };
     }
 
     // === !lewat <kode> ===
@@ -258,26 +242,10 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
 
       if (!bill) return { success: true, replyText: true, data: { message: `❌ Tagihan dengan kode *${kode}* tidak ditemukan.${HELP_FOOTER}` } };
 
-      const existingPayment = await prisma.billPayment.findUnique({
-        where: { billId_period: { billId: bill.id, period: cycle.period } }
-      });
-
-      if (existingPayment && existingPayment.status === "PAID") {
-        return { success: true, replyText: true, data: { message: `⚠️ Tagihan *${bill.name}* sudah terlanjur dilunasi di siklus ini.${HELP_FOOTER}` } };
+      const hasilLewat = await lewatiTagihan(cmdUser.id, bill.id, now);
+      if (hasilLewat.success === false) {
+        return { success: true, replyText: true, data: { message: `⚠️ ${"message" in hasilLewat ? hasilLewat.message : "Gagal melewati tagihan."}${HELP_FOOTER}` } };
       }
-
-      await prisma.billPayment.upsert({
-        where: { billId_period: { billId: bill.id, period: cycle.period } },
-        create: {
-          billId: bill.id,
-          userId: cmdUser.id,
-          period: cycle.period,
-          status: "SKIPPED",
-        },
-        update: {
-          status: "SKIPPED",
-        }
-      });
 
       return { success: true, replyText: true, data: { message: `⏩ Tagihan *${bill.name}* berhasil dilewati untuk siklus ini.${HELP_FOOTER}` } };
     }
@@ -345,7 +313,7 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
     // === !monthly ===
     if (lowerText === "!monthly") {
       const txs = await prisma.transaction.findMany({
-        where: { userId: cmdUser.id, date: { gte: cycleStart } },
+        where: { userId: cmdUser.id, date: { gte: cycleStart, lte: cycleEnd } },
         include: { category: true },
         orderBy: { date: "desc" },
       });
@@ -375,15 +343,29 @@ export const processBotTransactionUseCase = async (data: ProcessBotTransactionIn
         where: { userId: cmdUser.id, type: "EXPENSE", date: { gte: cycleStart, lte: cycleEnd } },
       });
 
-      const lines = pockets.map((p) => {
+      const pocketCategoryIds = new Set(pockets.map((p) => p.categoryId));
+      const pocketLines = pockets.map((p) => {
         const spent = expenses.find((e) => e.categoryId === p.categoryId)?._sum.amount || 0;
         let limit = p.limitAmount || 0;
         if (p.percentage != null && p.percentage > 0 && salary > 0) {
           limit = Math.floor((p.percentage / 100) * salary);
         }
         const sisa = limit - spent;
-        return `${p.category?.icon || "💼"} *${p.category?.name || "-"}*: Sisa ${formatIDR(sisa > 0 ? sisa : 0)} dari ${formatIDR(limit)}`;
-      }).join("\n");
+        const sisaLabel = sisa < 0
+          ? `⚠️ Overbudget ${formatIDR(sisa)}`
+          : `Sisa ${formatIDR(sisa)}`;
+        return `${p.category?.icon || "💼"} *${p.category?.name || "-"}*: ${sisaLabel} dari ${formatIDR(limit)}`;
+      });
+
+      const unpocketedSpent = expenses
+        .filter((e) => !pocketCategoryIds.has(e.categoryId))
+        .reduce((sum, e) => sum + (e._sum.amount || 0), 0);
+
+      if (unpocketedSpent > 0) {
+        pocketLines.push(`📦 *Di luar kantong*: Terpakai ${formatIDR(unpocketedSpent)}`);
+      }
+
+      const lines = pocketLines.join("\n");
       
       return { success: true, replyText: true, data: { message: `💼 *Saldo Kantong Siklus ${cycleLabel}*\n📅 _(${dateRangeLabel})_\n\n${lines}${HELP_FOOTER}` } };
     }

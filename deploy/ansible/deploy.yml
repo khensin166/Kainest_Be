@@ -60,7 +60,7 @@
           ACADEMIC_DATA_DIR=/app/data/academic
           ACADEMIC_EXCEL_DOWNLOAD_URL={{ academic_excel_download_url | default('', true) }}
           ACADEMIC_REMINDER_TARGET_PHONE={{ academic_reminder_target_phone | default('', true) }}
-          ACADEMIC_SYNC_CRON={{ academic_sync_cron | default('0 */6 * * *', true) }}
+          ACADEMIC_SYNC_CRON="{{ academic_sync_cron | default('0 */6 * * *', true) }}"
           ACADEMIC_SYNC_BATCH_SIZE={{ academic_sync_batch_size | default('30', true) }}
           ACADEMIC_ARCHIVE_RETENTION_DAYS={{ academic_archive_retention_days | default('2', true) }}
           ACADEMIC_DB_RETENTION_DAYS={{ academic_db_retention_days | default('30', true) }}
@@ -81,6 +81,14 @@
       shell: echo "{{ ghcr_token }}" | docker login ghcr.io -u "{{ ghcr_user }}" --password-stdin
       when: ghcr_token is defined and ghcr_token != ""
       no_log: true
+
+    - name: Memastikan permission volume log & data akademik untuk user node (UID 1000)
+      command: >
+        docker run --rm -u root
+        -v kainest-backend_kainest_be_logs:/app/logs
+        -v kainest-backend_kainest_be_academic_data:/app/data/academic
+        alpine chown -R 1000:1000 /app/logs /app/data/academic
+      ignore_errors: yes
 
     - name: Memaksa pembaruan (Pull & Up) Docker Compose
       command: docker compose up -d --pull always --force-recreate --remove-orphans
