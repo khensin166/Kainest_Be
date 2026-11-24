@@ -7,6 +7,8 @@ import { logger } from "../../../../infrastructure/logger/logger.js";
 import { getCycleBoundaries } from "../../../../utils/cycleBoundaries.js";
 import { processUserReset } from "../../../budgeting/services/MonthlyResetCron.js";
 import { lewatiTagihan, lunasiTagihan } from "../../../plans/domain/billService.js";
+import { getGroupNameViaGowa } from "../../../../utils/gowaService.js";
+const PRIVATE_CHAT_TRIGGERS = new Set(["hi kainest", "ping kainest", "hello kainest"]);
 // Pesan onboarding untuk user baru yang mengirim pesan pertama kali
 const FRONTEND_URL = (process.env.FRONTEND_URL || "https://kainest.kenantomfie.com").replace(/\/+$/, "");
 const FRONTEND_HOST = FRONTEND_URL.replace(/^https?:\/\//, "");
@@ -50,7 +52,39 @@ export const processBotTransactionUseCase = async (data) => {
     // 2. Pembersihan Sender
     const rawSender = data.sender;
     let cleanSender = rawSender.replace("@s.whatsapp.net", "").replace("@c.us", "").replace("@lid", "");
-    // 3. Intercept Perintah !link (prioritas utama, tanpa perlu cek user/grup)
+    // 3. Kebijakan Chat Pribadi (DM):
+    //    - Hanya balas keyword tertentu ('hi kainest', 'ping kainest', 'hello kainest')
+    //    - Tolak !link lewat DM (arahkan agar dilakukan di dalam Grup WA)
+    //    - Semua chat pribadi lainnya: silent ignore
+    if (!data.groupId) {
+        const trimmedLower = lowerText.trim();
+        if (PRIVATE_CHAT_TRIGGERS.has(trimmedLower)) {
+            return {
+                success: true,
+                replyText: true,
+                data: {
+                    message: `Halo! 👋 Aku *Kainest Bot*.\n\nPencatatan keuangan hanya aktif di dalam *Grup WhatsApp terdaftar* (bukan di chat pribadi).\n\nCara mulai:\n1️⃣ Buka *${FRONTEND_HOST}* → *Profil* → salin kode tautanmu\n2️⃣ Buat *Grup WhatsApp* & masukkan bot ini ke dalamnya\n3️⃣ Kirim \`!link KODE_KAMU\` *langsung di dalam grup* tersebut\n\n_(Akun reguler dapat menautkan maksimal 1 grup aktif)_`,
+                },
+            };
+        }
+        if (trimmedLower === "!link" || trimmedLower.startsWith("!link ")) {
+            return {
+                success: true,
+                replyText: true,
+                data: {
+                    message: `⚠️ Perintah *!link* tidak bisa dilakukan di chat pribadi.\n\nSilakan buat *Grup WhatsApp*, masukkan bot Kainest ke dalamnya, lalu kirim \`!link KODE_KAMU\` langsung *di dalam grup* tersebut ya!\n_(Maksimal 1 grup aktif untuk akun reguler)_`,
+                },
+            };
+        }
+        return {
+            success: false,
+            status: 200,
+            isIgnored: true,
+            ignoreReason: "private_chat_ignored",
+            message: "",
+        };
+    }
+    // 4. Intercept Perintah !link di dalam GRUP (boleh dijalankan di grup yang belum terdaftar)
     if (lowerText === "!link" || lowerText.startsWith("!link ")) {
         const code = textMsg.split(" ")[1];
         if (!code) {
@@ -60,35 +94,83 @@ export const processBotTransactionUseCase = async (data) => {
         if (!userToLink) {
             return { success: false, status: 404, message: `❌ Kode tidak valid atau akun tidak ditemukan. Coba salin ulang kode dari web Kainest ya!${HELP_FOOTER_CONST}`, replyText: true };
         }
-        // Simpan JID pengirim ke database (optional, bisa kosong jika belum ada)
+        // Batasi maksimal 1 grup aktif untuk user reguler (role !== "admin")
+        const isAdminUser = userToLink.role === "admin";
+        if (!isAdminUser) {
+            const otherGroups = await prisma.botActiveGroup.findMany({
+                where: {
+                    userId: userToLink.id,
+                    NOT: { groupId: data.groupId },
+                },
+                orderBy: { createdAt: "asc" },
+            });
+            if (otherGroups.length > 0) {
+                const existingGroup = otherGroups[0];
+                let existingGroupName = existingGroup.groupName;
+                if (!existingGroupName) {
+                    existingGroupName = await getGroupNameViaGowa(existingGroup.groupId);
+                    if (existingGroupName) {
+                        await prisma.botActiveGroup
+                            .update({
+                            where: { groupId: existingGroup.groupId },
+                            data: { groupName: existingGroupName },
+                        })
+                            .catch(() => { });
+                    }
+                }
+                const displayName = existingGroupName || existingGroup.groupId;
+                return {
+                    success: false,
+                    status: 409,
+                    replyText: true,
+                    message: `⚠️ Akun kamu sudah terhubung ke grup *${displayName}*.\n\nAkun reguler hanya dapat menggunakan maksimal *1 grup aktif* untuk mencatat.\n\nJika ingin pindah ke grup baru, lepaskan grup lama terlebih dahulu dengan mengirim perintah *!unlink* di grup lama (atau lewat menu *Profil* di web Kainest).`,
+                };
+            }
+        }
+        // Ambil nama grup dari GOWA untuk disimpan di BotActiveGroup
+        const fetchedGroupName = await getGroupNameViaGowa(data.groupId);
+        // Simpan JID pengirim ke database
         const jidToSave = rawSender.replace("@s.whatsapp.net", "").replace("@c.us", "").replace("@lid", "");
         await botTransactionRepository.updateWhatsappJid(userToLink.id, jidToSave);
-        // Jika dikirim dari GRUP: langsung aktifkan grup sekaligus
-        if (data.groupId) {
-            await prisma.botActiveGroup.upsert({
-                where: { groupId: data.groupId },
-                create: { groupId: data.groupId, userId: userToLink.id },
-                update: { userId: userToLink.id }, // Update userId jika grup sudah ada (relink)
-            });
-            return {
-                success: true,
-                data: {
-                    message: `✅ Yeay! Akun Kainest *${userToLink.name || userToLink.email}* berhasil terhubung & Grup ini langsung AKTIF! 🎊\n\nKamu sudah bisa langsung mencatat di sini.\nContoh: *Makan siang 20k* atau *Bensin 50rb* 🎉${HELP_FOOTER_CONST}`,
-                    sendKicawSticker: true,
-                },
-            };
-        }
-        // Jika dikirim via PRIVATE CHAT: akun tertaut tapi grup belum
+        await prisma.botActiveGroup.upsert({
+            where: { groupId: data.groupId },
+            create: { groupId: data.groupId, userId: userToLink.id, groupName: fetchedGroupName },
+            update: { userId: userToLink.id, ...(fetchedGroupName ? { groupName: fetchedGroupName } : {}) },
+        });
+        const groupLabel = fetchedGroupName ? ` (*${fetchedGroupName}*)` : "";
         return {
             success: true,
             data: {
-                message: `✅ Akun Kainest *${userToLink.name || userToLink.email}* berhasil terhubung! 🎉\n\nSatu langkah lagi:\n→ Buat *Grup WhatsApp baru*, masukkan aku ke sana, lalu kirim ulang pesan \`!link ${code}\` di dalam grup agar grup tersebut aktif untuk mencatat.${HELP_FOOTER_CONST}`,
+                message: `✅ Yeay! Akun Kainest *${userToLink.name || userToLink.email}* berhasil terhubung & Grup ini${groupLabel} langsung AKTIF! 🎊\n\nKamu sudah bisa langsung mencatat di sini.\nContoh: *Makan siang 20k* atau *Bensin 50rb* 🎉${HELP_FOOTER_CONST}`,
                 sendKicawSticker: true,
             },
         };
     }
-    // 4. Intercept Perintah Bot (berawalan !) — Diproses SETELAH user lookup
-    //    Perintah ini memerlukan user valid. Cek user dahulu.
+    // 5. Cek apakah grup sudah terdaftar — jika BELUM terdaftar, silent ignore (tidak balas apa pun)
+    const activeGroup = await botTransactionRepository.getActiveGroup(data.groupId);
+    if (!activeGroup) {
+        return {
+            success: false,
+            status: 200,
+            isIgnored: true,
+            ignoreReason: "unregistered_group_ignored",
+            message: "",
+        };
+    }
+    // Lazy auto-sync nama grup untuk user existing yang groupName-nya masih kosong (non-blocking)
+    if (!activeGroup.groupName) {
+        void getGroupNameViaGowa(data.groupId).then((fetchedName) => {
+            if (fetchedName) {
+                prisma.botActiveGroup
+                    .update({
+                    where: { groupId: data.groupId },
+                    data: { groupName: fetchedName },
+                })
+                    .catch(() => { });
+            }
+        });
+    }
+    // 6. Intercept Perintah Bot (berawalan !) di dalam Grup Terdaftar
     const isBotCommand = lowerText.startsWith("!") && !lowerText.startsWith("!link");
     if (isBotCommand) {
         const cmdUser = await botTransactionRepository.getUserByPhoneNumber(cleanSender);
@@ -378,6 +460,27 @@ export const processBotTransactionUseCase = async (data) => {
             await prisma.transaction.delete({ where: { id: lastTx.id } });
             return { success: true, replyText: true, data: { message: `✅ Transaksi berhasil dihapus!\n🧾 ${lastTx.note || "-"} (${formatIDR(lastTx.amount)})${HELP_FOOTER}` } };
         }
+        // === !unlink ===
+        if (lowerText === "!unlink") {
+            const isOwner = activeGroup.userId === cmdUser.id;
+            const isAdmin = cmdUser.role === "admin";
+            if (!isOwner && !isAdmin) {
+                return {
+                    success: true,
+                    replyText: true,
+                    data: { message: `🚫 Hanya pemilik tautan grup atau Admin yang dapat melepas grup ini.${HELP_FOOTER}` },
+                };
+            }
+            const groupLabel = activeGroup.groupName ? ` *${activeGroup.groupName}*` : "";
+            await prisma.botActiveGroup.delete({ where: { groupId: data.groupId } });
+            return {
+                success: true,
+                replyText: true,
+                data: {
+                    message: `🔓 Tautan grup${groupLabel} berhasil dilepas!\n\nKamu sekarang bisa menautkan grup WhatsApp baru dengan perintah \`!link KODE_KAMU\` di dalam grup baru tersebut.`,
+                },
+            };
+        }
         // === !web / !app ===
         if (lowerText === "!web" || lowerText === "!app") {
             return {
@@ -552,6 +655,7 @@ export const processBotTransactionUseCase = async (data) => {
                         `!undo    — Lihat & konfirmasi hapus transaksi terakhir\n` +
                         `!undo Y  — Hapus transaksi terakhir (setelah konfirmasi)\n` +
                         `!link KODE — Hubungkan akun & aktifkan grup\n` +
+                        `!unlink  — Lepas tautan grup ini dari akunmu\n` +
                         `!web     — Dapatkan tautan website Kainest` +
                         adminSection + planSection + `\n\n` +
                         `💬 *Mencatat Transaksi*\n` +
@@ -583,28 +687,13 @@ export const processBotTransactionUseCase = async (data) => {
             },
         };
     }
-    // 7. Validasi Grup Aktif (user sudah terdaftar, tapi grup belum diaktifkan)
-    if (data.groupId) {
-        const activeGroup = await botTransactionRepository.getActiveGroup(data.groupId);
-        if (!activeGroup) {
-            // Balas peringatan grup belum aktif — arahkan ke !link
-            return {
-                success: true,
-                reaction: "⚠️",
-                replyText: true,
-                data: {
-                    message: `👋 Halo, ${user.name || "Kak"}! Grup ini belum terdaftar untuk Kainest.\n\nUntuk mengaktifkannya, kirim perintah berikut di grup ini:\n  \`!link KODE_TAUTANMU\`\n\n_(Temukan kodemu di web Kainest → Profil → Pasangan)_\n\n💡 Ketik !help untuk bantuan.`,
-                }
-            };
-        }
-        // ✨ AUTO-RELINK: Jika grup aktif tapi userId masih kosong, isi otomatis dari sender
-        if (activeGroup && !activeGroup.userId) {
-            logger.info(`[Auto-Relink] Grup ${data.groupId} belum punya userId, mencoba mengaitkan dengan user ${user.id} (${user.name || user.email})`);
-            await prisma.botActiveGroup.update({
-                where: { groupId: data.groupId },
-                data: { userId: user.id },
-            });
-        }
+    // 7. Auto-relink userId jika grup aktif tapi userId masih kosong
+    if (activeGroup && !activeGroup.userId) {
+        logger.info(`[Auto-Relink] Grup ${data.groupId} belum punya userId, mencoba mengaitkan dengan user ${user.id} (${user.name || user.email})`);
+        await prisma.botActiveGroup.update({
+            where: { groupId: data.groupId },
+            data: { userId: user.id },
+        });
     }
     // 8. Jika sapaan dan grup sudah aktif → balas sambutan singkat
     if (isGreeting) {

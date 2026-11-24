@@ -47,6 +47,7 @@ export const getActiveGroupsController = async (c) => {
         const result = groups.map((g) => ({
             id: g.id,
             groupId: g.groupId,
+            groupName: g.groupName ?? null,
             createdAt: g.createdAt,
             linkedBy: g.user
                 ? { id: g.user.id, name: g.user.name, email: g.user.email }
@@ -107,4 +108,65 @@ export const blastMessageController = async (c) => {
             failedGroups,
         },
     });
+};
+/**
+ * GET /wabot/my-groups
+ * Mengembalikan daftar grup WhatsApp aktif milik user yang sedang login.
+ */
+export const getMyActiveGroupsController = async (c) => {
+    try {
+        const userId = c.get("userId");
+        const [user, groups] = await Promise.all([
+            prisma.user.findUnique({ where: { id: userId }, select: { role: true } }),
+            prisma.botActiveGroup.findMany({
+                where: { userId },
+                orderBy: { createdAt: "desc" },
+            }),
+        ]);
+        const isAdmin = user?.role === "admin";
+        return c.json({
+            success: true,
+            data: {
+                isAdmin,
+                maxGroups: isAdmin ? null : 1,
+                groups: groups.map((g) => ({
+                    id: g.id,
+                    groupId: g.groupId,
+                    groupName: g.groupName ?? null,
+                    createdAt: g.createdAt,
+                })),
+            },
+        });
+    }
+    catch (error) {
+        logger.error("[GetMyActiveGroups] Error:", error.message);
+        return c.json({ success: false, message: "Gagal mengambil grup terhubung" }, 500);
+    }
+};
+/**
+ * DELETE /wabot/my-groups/:groupId
+ * Melepas tautan grup WhatsApp milik user yang sedang login.
+ */
+export const unlinkMyGroupController = async (c) => {
+    try {
+        const userId = c.get("userId");
+        const groupId = decodeURIComponent(c.req.param("groupId") || "");
+        if (!groupId) {
+            return c.json({ success: false, message: "groupId wajib diisi" }, 400);
+        }
+        const existing = await prisma.botActiveGroup.findUnique({ where: { groupId } });
+        if (!existing) {
+            return c.json({ success: false, message: "Grup tidak ditemukan" }, 404);
+        }
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+        if (existing.userId !== userId && user?.role !== "admin") {
+            return c.json({ success: false, message: "Anda tidak memiliki izin melepas grup ini" }, 403);
+        }
+        await prisma.botActiveGroup.delete({ where: { groupId } });
+        return c.json({ success: true, message: "Tautan grup WhatsApp berhasil dilepas." });
+    }
+    catch (error) {
+        logger.error("[UnlinkMyGroup] Error:", error.message);
+        return c.json({ success: false, message: "Gagal melepas tautan grup" }, 500);
+    }
 };

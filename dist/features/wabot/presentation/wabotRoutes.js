@@ -6,7 +6,7 @@ import { extractClientIp } from "../../../utils/securityHelpers.js";
 import { saveConfigController, getConfigController, saveBotInfoController, getBotInfoController } from "../services/WaBotConfigController.js";
 import { addBotTransactionController } from "../services/WaBotTransactionController.js";
 import { gowaWebhookController } from "../services/GowaWebhookController.js";
-import { getActiveGroupsController, blastMessageController } from "../services/BlastController.js";
+import { getActiveGroupsController, blastMessageController, getMyActiveGroupsController, unlinkMyGroupController, } from "../services/BlastController.js";
 import { proxyGetDevices, proxyCreateDevice, proxyDeleteDevice, proxyLogoutDevice, proxyGetDeviceLogin } from "../services/DeviceProxyController.js";
 import { rateLimiter } from 'hono-rate-limiter';
 export const wabotRoute = new Hono();
@@ -23,6 +23,11 @@ const webhookRateLimiter = rateLimiter({
 wabotRoute.use("/config", authMiddleware);
 wabotRoute.post("/config", saveConfigController);
 wabotRoute.get("/config", getConfigController);
+// Rute Grup WA Terhubung milik User (Perlu Login)
+wabotRoute.use("/my-groups", authMiddleware);
+wabotRoute.use("/my-groups/*", authMiddleware);
+wabotRoute.get("/my-groups", getMyActiveGroupsController);
+wabotRoute.delete("/my-groups/:groupId", unlinkMyGroupController);
 // ==========================================
 // Rute Info Bot Global
 // ==========================================

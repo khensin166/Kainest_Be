@@ -7,6 +7,7 @@ import { processBotTransactionUseCase } from "../domain/use-cases/ProcessBotTran
 import { logger } from "../../../infrastructure/logger/logger.js";
 import { asyncContext } from "../../../infrastructure/logger/asyncContext.js";
 import { verifyHmacSha256Signature } from "../../../utils/securityHelpers.js";
+import { prisma } from "../../../infrastructure/database/prisma.js";
 
 // URL & API Key GOWA (diambil dari .env, isi saat deploy di VPS)
 const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
@@ -224,16 +225,28 @@ export const gowaWebhookController = async (c: Context) => {
     // Kita jalankan sisa proses tanpa await, dan langsung return 200 OK ke GOWA
     const runBackground = async () => {
       try {
-        // 6. Kirim reaksi ⏳ ke pengirim sebagai tanda "sedang diproses"
-        if (messageId) {
-          const replyTarget = groupId || `${senderPhone}@s.whatsapp.net`;
-          await sendReactionViaGowa(replyTarget, messageId, "⏳").catch(() => {});
-        }
-
-        // 7. Proses pesan menggunakan logic backend yang sudah ada
+        // 6. Tentukan apakah pesan berhak mendapat reaksi ⏳ (hindari spam reaksi di DM / grup tak terdaftar)
         let processedText = textBody;
         if (BOT_ENV_MODE === "staging" && !isAudio) {
           processedText = textBody.slice("!dev ".length).trim();
+        }
+        const trimmedLower = processedText.trim().toLowerCase();
+
+        let shouldSendPendingReaction = false;
+        if (groupId && messageId) {
+          if (trimmedLower === "!link" || trimmedLower.startsWith("!link ")) {
+            shouldSendPendingReaction = true;
+          } else {
+            const registeredGroup = await prisma.botActiveGroup
+              .findUnique({ where: { groupId }, select: { id: true } })
+              .catch(() => null);
+            shouldSendPendingReaction = Boolean(registeredGroup);
+          }
+        }
+
+        if (shouldSendPendingReaction && messageId) {
+          const replyTarget = groupId || `${senderPhone}@s.whatsapp.net`;
+          await sendReactionViaGowa(replyTarget, messageId, "⏳").catch(() => {});
         }
 
         let type = "text";
