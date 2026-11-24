@@ -77,6 +77,11 @@
         - "'already exists' not in network_result.stderr"
       changed_when: network_result.rc == 0
 
+    - name: Login ke GitHub Container Registry (GHCR) di server target
+      shell: echo "{{ ghcr_token }}" | docker login ghcr.io -u "{{ ghcr_user }}" --password-stdin
+      when: ghcr_token is defined and ghcr_token != ""
+      no_log: true
+
     - name: Memaksa pembaruan (Pull & Up) Docker Compose
       command: docker compose up -d --pull always --force-recreate --remove-orphans
       args:
@@ -87,10 +92,21 @@
 
     - name: Debug Docker Compose Output (Jika Gagal)
       debug:
-        msg: |
-          STDOUT: {{ compose_result.stdout }}
-          STDERR: {{ compose_result.stderr }}
+        msg:
+          stdout: "{{ compose_result.stdout_lines | default([]) }}"
+          stderr: "{{ compose_result.stderr_lines | default([]) }}"
       when: compose_result.rc != 0
+
+    - name: Ambil log container jika startup gagal
+      command: docker logs --tail=50 kainest-backend
+      register: container_crash_logs
+      when: compose_result.rc != 0
+      ignore_errors: yes
+
+    - name: Tampilkan log crash container
+      debug:
+        msg: "{{ container_crash_logs.stdout_lines | default(container_crash_logs.stderr_lines) }}"
+      when: compose_result.rc != 0 and container_crash_logs is defined
 
     - name: Fail jika Docker Compose Gagal
       fail:
