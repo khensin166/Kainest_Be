@@ -1,6 +1,7 @@
 // src/features/academicCalendar/presentation/academicCalendarRoute.ts
 import { Hono } from "hono";
 import { requireAdmin } from "../../../core/middlewares/role.middleware.js";
+import { timingSafeEqualStrings } from "../../../utils/securityHelpers.js";
 import { dispatchRemindersNowController, listAcademicEventsController, listReminderRulesController, listSyncLogsController, triggerAcademicSyncController, updateReminderRuleController, } from "../services/academicCalendarController.js";
 /**
  * Mengizinkan akses melalui:
@@ -8,9 +9,9 @@ import { dispatchRemindersNowController, listAcademicEventsController, listRemin
  * 2. Session Administrator (Better Auth `role === "admin"`).
  */
 const requireAdminOrApiKey = async (c, next) => {
-    const apiKey = c.req.header("x-api-key") || c.req.header("Authorization")?.replace(/^Bearer\s+/i, "");
-    const validApiKey = process.env.WA_BOT_API_KEY;
-    if (validApiKey && apiKey && apiKey === validApiKey) {
+    const apiKey = c.req.header("x-api-key") || c.req.header("Authorization")?.replace(/^Bearer\s+/i, "") || "";
+    const validApiKey = process.env.ACADEMIC_API_KEY || process.env.WA_BOT_API_KEY;
+    if (validApiKey && apiKey && timingSafeEqualStrings(apiKey, validApiKey)) {
         await next();
         return;
     }

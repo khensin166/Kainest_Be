@@ -6,6 +6,7 @@ import { Context } from "hono";
 import { processBotTransactionUseCase } from "../domain/use-cases/ProcessBotTransactionUseCase.js";
 import { logger } from "../../../infrastructure/logger/logger.js";
 import { asyncContext } from "../../../infrastructure/logger/asyncContext.js";
+import { verifyHmacSha256Signature } from "../../../utils/securityHelpers.js";
 
 // URL & API Key GOWA (diambil dari .env, isi saat deploy di VPS)
 const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
@@ -134,8 +135,19 @@ export const gowaWebhookController = async (c: Context) => {
   const correlationId = c.get("correlationId");
 
   try {
-    // 1. Parsing payload dari GOWA v8.9
-    const rawPayload = await c.req.json();
+    // 1. Baca raw body untuk mendukung verifikasi HMAC-SHA256 opsional (zero-downtime)
+    const rawBodyText = await c.req.text();
+    const webhookSecret = process.env.GOWA_WEBHOOK_SECRET?.trim();
+    if (webhookSecret) {
+      const sigHeader =
+        c.req.header("x-hub-signature-256") || c.req.header("x-webhook-signature");
+      if (!verifyHmacSha256Signature(rawBodyText, sigHeader, webhookSecret)) {
+        logger.warn("[GowaWebhook] Signature HMAC tidak valid atau hilang.");
+        return c.json({ success: false, message: "Unauthorized: Invalid webhook signature" }, 401);
+      }
+    }
+
+    const rawPayload = JSON.parse(rawBodyText);
     
     // Zod Validation (Sanitasi Input)
     const payload = gowaWebhookSchema.parse(rawPayload);

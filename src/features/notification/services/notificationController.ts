@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { prisma } from "../../../infrastructure/database/prisma.js";
 import { logger } from "../../../infrastructure/logger/logger.js";
+import { clampLimit } from "../../../utils/securityHelpers.js";
 
 /**
  * GET /notifications
@@ -9,7 +10,7 @@ import { logger } from "../../../infrastructure/logger/logger.js";
 export async function getNotificationsController(c: Context) {
   try {
     const userId = c.get("userId") as string;
-    const limit = Number(c.req.query("limit") ?? 20);
+    const limit = clampLimit(c.req.query("limit"), 20, 100);
 
     const notifications = await prisma.appNotification.findMany({
       where: { userId },

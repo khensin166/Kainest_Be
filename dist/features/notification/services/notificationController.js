@@ -1,5 +1,6 @@
 import { prisma } from "../../../infrastructure/database/prisma.js";
 import { logger } from "../../../infrastructure/logger/logger.js";
+import { clampLimit } from "../../../utils/securityHelpers.js";
 /**
  * GET /notifications
  * Ambil semua notifikasi milik user yang login, terbaru dulu.
@@ -7,7 +8,7 @@ import { logger } from "../../../infrastructure/logger/logger.js";
 export async function getNotificationsController(c) {
     try {
         const userId = c.get("userId");
-        const limit = Number(c.req.query("limit") ?? 20);
+        const limit = clampLimit(c.req.query("limit"), 20, 100);
         const notifications = await prisma.appNotification.findMany({
             where: { userId },
             orderBy: { createdAt: "desc" },

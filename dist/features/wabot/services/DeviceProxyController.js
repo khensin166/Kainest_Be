@@ -1,4 +1,5 @@
 import { logger } from "../../../infrastructure/logger/logger.js";
+import { isSafePathSegment } from "../../../utils/securityHelpers.js";
 // URL & API Key GOWA (diambil dari .env)
 // WA_BOT_API_KEY diasumsikan sudah dalam format Base64 siap pakai (misal: a2FpemVudDpCcmVAa3Rocm91Z2gyMzIx)
 const GOWA_BASE_URL = process.env.GOWA_BASE_URL || "http://gowa:3000";
@@ -64,7 +65,10 @@ export const proxyCreateDevice = async (c) => {
 export const proxyDeleteDevice = async (c) => {
     try {
         const id = c.req.param("id");
-        const resp = await fetch(`${GOWA_BASE_URL}/devices/${id}`, {
+        if (!isSafePathSegment(id)) {
+            return c.json({ success: false, message: "Invalid device ID format" }, 400);
+        }
+        const resp = await fetch(`${GOWA_BASE_URL}/devices/${encodeURIComponent(id)}`, {
             method: "DELETE",
             headers: getGowaHeaders(),
         });
@@ -82,7 +86,10 @@ export const proxyDeleteDevice = async (c) => {
 export const proxyLogoutDevice = async (c) => {
     try {
         const id = c.req.param("id");
-        const resp = await fetch(`${GOWA_BASE_URL}/devices/${id}/logout`, {
+        if (!isSafePathSegment(id)) {
+            return c.json({ success: false, message: "Invalid device ID format" }, 400);
+        }
+        const resp = await fetch(`${GOWA_BASE_URL}/devices/${encodeURIComponent(id)}/logout`, {
             method: "POST",
             headers: getGowaHeaders(),
         });
@@ -100,7 +107,10 @@ export const proxyLogoutDevice = async (c) => {
 export const proxyGetDeviceLogin = async (c) => {
     try {
         const id = c.req.param("id");
-        const resp = await fetch(`${GOWA_BASE_URL}/devices/${id}/login`, {
+        if (!isSafePathSegment(id)) {
+            return c.json({ success: false, message: "Invalid device ID format" }, 400);
+        }
+        const resp = await fetch(`${GOWA_BASE_URL}/devices/${encodeURIComponent(id)}/login`, {
             method: "GET",
             headers: getGowaHeaders(),
         });
