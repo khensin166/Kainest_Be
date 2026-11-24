@@ -433,6 +433,7 @@ model Verification {
 model BotActiveGroup {
   id        String   @id @default(dbgenerated("gen_random_uuid()"))
   groupId   String   @unique
+  groupName String?  // Nama grup WA (auto-sync dari GOWA saat !link atau transaksi)
   userId    String?  // User pertama yg terkait grup ini (auto-relink)
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
