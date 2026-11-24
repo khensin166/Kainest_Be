@@ -21,6 +21,8 @@ import { academicCalendarRoute } from "./features/academicCalendar/presentation/
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
 import { loggingMiddleware } from './infrastructure/middlewares/LoggingMiddleware.js';
+import { requireAdmin } from './core/middlewares/role.middleware.js';
+import { extractClientIp } from './utils/securityHelpers.js';
 const app = new Hono();
 // Security Hardening: Tambahkan HTTP Security Headers
 app.use('*', secureHeaders());
@@ -82,9 +84,7 @@ const authRateLimiter = rateLimiter({
     windowMs: 60 * 1000,
     limit: 20,
     standardHeaders: "draft-6",
-    keyGenerator: (c) => {
-        return c.req.header('x-forwarded-for') || c.env?.REMOTE_ADDR || "anonymous";
-    }
+    keyGenerator: (c) => extractClientIp(c),
 });
 app.on(["POST", "GET"], "/auth/*", authRateLimiter, (c) => auth.handler(c.req.raw));
 app.route('/profile', profileRoute);
@@ -103,6 +103,13 @@ app.route("/plans", plansRoute);
 app.route("/rbac", rbacRoute);
 app.route("/academic-calendar", academicCalendarRoute);
 app.get('/', (c) => c.text('Hello from Kainest Backend! 🚀'));
+// Proteksi dokumentasi internal arsitektur di production (Admin only)
+app.use('/doc', async (c, next) => {
+    if (process.env.NODE_ENV === 'production') {
+        return requireAdmin(c, next);
+    }
+    await next();
+});
 app.get('/doc', (c) => {
     try {
         const docPath = path.resolve(process.cwd(), 'doc', 'kainest_system_flow.md');

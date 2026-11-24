@@ -1,8 +1,19 @@
 import { SplitBillSessionRepository } from "../domain/SplitBillSessionRepository.js";
 import { auth } from "../../../infrastructure/auth.js";
 import { sendTextViaGowa } from "../../../utils/gowaService.js";
+import { isValidWhatsAppRecipient } from "../../../utils/securityHelpers.js";
 const RECEIPT_AI_URL = process.env.RECEIPT_AI_URL || "https://receipt-ai.kenantomfie.com";
 const RECEIPT_AI_TOKEN = process.env.RECEIPT_AI_TOKEN || "";
+const MAX_RECEIPT_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
+const ALLOWED_RECEIPT_MIME_TYPES = new Set([
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "application/pdf",
+]);
 /**
  * Menerima payload split bill dari frontend, mengirimnya ke AI Service (FastAPI),
  * lalu menyimpan hasilnya di Database (Prisma) agar bisa dibagikan publik.
@@ -58,20 +69,27 @@ export const scanReceiptController = async (c) => {
             return c.json({ error: "Unauthorized" }, 401);
         }
         const formData = await c.req.formData();
-        // Receipt AI Service (FastAPI) membutuhkan field bernama 'image'
-        if (formData.has("file") && !formData.has("image")) {
-            const file = formData.get("file");
-            if (file) {
-                formData.append("image", file);
-            }
+        // Validasi file struk (tipe MIME & ukuran maksimal 5 MB)
+        const uploadedEntry = formData.get("image") || formData.get("file");
+        if (!(uploadedEntry instanceof File)) {
+            return c.json({ error: "File struk wajib diunggah." }, 400);
         }
+        if (uploadedEntry.size === 0 || uploadedEntry.size > MAX_RECEIPT_FILE_BYTES) {
+            return c.json({ error: "Ukuran file struk tidak valid (maksimal 5 MB)." }, 400);
+        }
+        if (uploadedEntry.type && !ALLOWED_RECEIPT_MIME_TYPES.has(uploadedEntry.type.toLowerCase())) {
+            return c.json({ error: "Format file tidak didukung. Gunakan JPG, PNG, WEBP, HEIC, atau PDF." }, 400);
+        }
+        // Receipt AI Service (FastAPI) membutuhkan field bernama 'image'
+        const forwardForm = new FormData();
+        forwardForm.append("image", uploadedEntry, uploadedEntry.name || "receipt.jpg");
         // Kirim formData (termasuk file) ke AI Service
         const response = await fetch(`${RECEIPT_AI_URL}/receipt/scan`, {
             method: "POST",
             headers: {
                 "X-API-Key": RECEIPT_AI_TOKEN,
             },
-            body: formData,
+            body: forwardForm,
         });
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
@@ -112,11 +130,17 @@ export const blastSplitBillController = async (c) => {
             return c.json({ error: "Unauthorized" }, 401);
         }
         const { targetPhone, message } = await c.req.json();
-        if (!targetPhone || !message) {
+        if (!targetPhone || !message || typeof targetPhone !== "string" || typeof message !== "string") {
             return c.json({ error: "Target dan pesan harus diisi" }, 400);
         }
+        if (!isValidWhatsAppRecipient(targetPhone)) {
+            return c.json({ error: "Format nomor WhatsApp atau Group JID tidak valid" }, 400);
+        }
+        if (message.trim().length === 0 || message.length > 2000) {
+            return c.json({ error: "Panjang pesan harus antara 1 hingga 2000 karakter" }, 400);
+        }
         // Mengirim WA menggunakan fungsi bawaan GOWA terpusat
-        await sendTextViaGowa(targetPhone, message);
+        await sendTextViaGowa(targetPhone.trim(), message);
         return c.json({ status: "success", message: "Blast dikirim!" });
     }
     catch (error) {

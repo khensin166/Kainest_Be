@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { prisma } from "../../../infrastructure/database/prisma.js";
 import { logger } from "../../../infrastructure/logger/logger.js";
+import { clampLimit } from "../../../utils/securityHelpers.js";
 
 /**
  * GET /system-updates
@@ -8,7 +9,7 @@ import { logger } from "../../../infrastructure/logger/logger.js";
  */
 export async function getSystemUpdatesController(c: Context) {
   try {
-    const limit = Number(c.req.query("limit") ?? 5);
+    const limit = clampLimit(c.req.query("limit"), 5, 50);
 
     const updates = await prisma.systemUpdate.findMany({
       orderBy: { date: "desc" },

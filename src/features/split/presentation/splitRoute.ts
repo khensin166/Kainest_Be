@@ -1,5 +1,7 @@
 import { Hono } from "hono";
+import { rateLimiter } from "hono-rate-limiter";
 import { authMiddleware } from "../../auth/presentation/authMiddleware.js";
+import { extractClientIp } from "../../../utils/securityHelpers.js";
 import {
   calculateAndSaveSplitController,
   getSharedSplitController,
@@ -8,6 +10,20 @@ import {
 } from "../services/splitController.js";
 
 export const splitRoute = new Hono();
+
+const splitScanRateLimiter = rateLimiter({
+  windowMs: 60 * 1000,
+  limit: 15,
+  standardHeaders: "draft-6",
+  keyGenerator: (c) => ((c as any).get("userId") as string) || extractClientIp(c),
+});
+
+const splitBlastRateLimiter = rateLimiter({
+  windowMs: 60 * 1000,
+  limit: 5,
+  standardHeaders: "draft-6",
+  keyGenerator: (c) => ((c as any).get("userId") as string) || extractClientIp(c),
+});
 
 // 1. Endpoint Publik untuk melihat hasil Split Bill (dibagikan)
 splitRoute.get("/share/:id", getSharedSplitController);
@@ -21,13 +37,13 @@ splitRoute.use("*", authMiddleware);
 splitRoute.post("/", calculateAndSaveSplitController);
 
 // 3. Scan Struk (Proxy ke AI Service)
-splitRoute.post("/scan", async (c) => {
+splitRoute.post("/scan", splitScanRateLimiter, async (c) => {
   const { scanReceiptController } = await import("../services/splitController.js");
   return scanReceiptController(c);
 });
 
 // 4. Mengirimkan tagihan via WA Blast (Kainest-GOWA)
-splitRoute.post("/blast", blastSplitBillController);
+splitRoute.post("/blast", splitBlastRateLimiter, blastSplitBillController);
 
 // 5. Riwayat Split Bill
 splitRoute.get("/history", getSplitHistoryController);

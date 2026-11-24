@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../../auth/presentation/authMiddleware.js";
+import { requireAdmin } from "../../../core/middlewares/role.middleware.js";
 import { botAuthMiddleware } from "../../../infrastructure/middlewares/BotAuthMiddleware.js";
+import { extractClientIp } from "../../../utils/securityHelpers.js";
 import { saveConfigController, getConfigController, saveBotInfoController, getBotInfoController } from "../services/WaBotConfigController.js";
 import { addBotTransactionController } from "../services/WaBotTransactionController.js";
 import { gowaWebhookController } from "../services/GowaWebhookController.js";
@@ -13,9 +15,7 @@ const webhookRateLimiter = rateLimiter({
     windowMs: 60 * 1000, // 1 menit
     limit: 100, // Limit 100 request
     standardHeaders: "draft-6",
-    keyGenerator: (c) => {
-        return c.req.header('x-forwarded-for') || c.env?.REMOTE_ADDR || "anonymous";
-    }
+    keyGenerator: (c) => extractClientIp(c),
 });
 // ==========================================
 // Rute Konfigurasi User (Perlu JWT Login)
@@ -42,15 +42,15 @@ wabotRoute.post("/webhook/gowa", webhookRateLimiter, gowaWebhookController);
 // ==========================================
 // Rute Blast Message & Active Groups (Admin Only)
 // ==========================================
-wabotRoute.use("/active-groups", authMiddleware);
-wabotRoute.use("/blast", authMiddleware);
+wabotRoute.use("/active-groups", requireAdmin);
+wabotRoute.use("/blast", requireAdmin);
 wabotRoute.get("/active-groups", getActiveGroupsController);
 wabotRoute.post("/blast", blastMessageController);
 // ==========================================
 // Rute Proxy ke GOWA Device Hub (Admin Only)
 // ==========================================
-wabotRoute.use("/devices", authMiddleware);
-wabotRoute.use("/devices/*", authMiddleware);
+wabotRoute.use("/devices", requireAdmin);
+wabotRoute.use("/devices/*", requireAdmin);
 wabotRoute.get("/devices", proxyGetDevices);
 wabotRoute.post("/devices", proxyCreateDevice);
 wabotRoute.delete("/devices/:id", proxyDeleteDevice);

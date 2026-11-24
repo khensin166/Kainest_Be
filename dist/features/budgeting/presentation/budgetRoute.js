@@ -1,9 +1,19 @@
 import { Hono } from "hono";
+import { rateLimiter } from "hono-rate-limiter";
 import { authMiddleware } from "../../auth/presentation/authMiddleware.js";
+import { requireAdmin } from "../../../core/middlewares/role.middleware.js";
+import { extractClientIp } from "../../../utils/securityHelpers.js";
 import { createTransactionController, getBudgetStatusController, getCategoriesController, createCustomCategoryController, setupBudgetController, getSummaryController, getAiAdviceController, seedCategoriesController, evaluateBudgetController, getTrendController, getTransactionsController, getTransactionDetailController, updateTransactionController, deleteTransactionController, 
 // Pocket Controllers
 getPocketsController, upsertPocketController, deletePocketController, bulkSetupPocketsController, updateKeywordsController, classifyTransactionController, getMonthlyHistoryController, getAiSuggestionController, applyAiSuggestionController, dismissAiSuggestionController, } from "../services/budgetController.js";
 export const budgetRoute = new Hono();
+// Rate limiter untuk endpoint AI Groq (maks 20 request/menit per user)
+const aiBudgetRateLimiter = rateLimiter({
+    windowMs: 60 * 1000,
+    limit: 20,
+    standardHeaders: "draft-6",
+    keyGenerator: (c) => c.get("userId") || extractClientIp(c),
+});
 // Middleware Auth (Wajib Login)
 budgetRoute.use("*", authMiddleware);
 // 1. Ambil daftar kategori (untuk dropdown)
@@ -29,12 +39,12 @@ budgetRoute.post("/setup", setupBudgetController);
 budgetRoute.get("/summary", getSummaryController);
 // GET /api/budget/advisor/:categoryId
 // Frontend memanggil ini saat user klik tombol "Minta Saran AI" atau saat loading dashboard
-budgetRoute.get("/advisor/:categoryId", getAiAdviceController);
-// POST /api/budget/seed-categories (Hanya dijalankan sekali oleh Admin/Dev)
-budgetRoute.post("/seed-categories", seedCategoriesController);
+budgetRoute.get("/advisor/:categoryId", aiBudgetRateLimiter, getAiAdviceController);
+// POST /api/budget/seed-categories (Hanya dijalankan sekali oleh Admin)
+budgetRoute.post("/seed-categories", requireAdmin, seedCategoriesController);
 // POST /api/budget/evaluate
 // Dipanggil saat tombol "Tutup Buku Bulan Ini" ditekan user
-budgetRoute.post("/evaluate", evaluateBudgetController);
+budgetRoute.post("/evaluate", aiBudgetRateLimiter, evaluateBudgetController);
 // Ambil Data Tren Harian (GET) -> Untuk Grafik Dashboard
 budgetRoute.get("/trend", getTrendController);
 // ==========================================
@@ -50,8 +60,8 @@ budgetRoute.delete("/pockets/:categoryId", deletePocketController);
 budgetRoute.post("/pockets/setup", bulkSetupPocketsController);
 // PATCH: Update keywords pada kategori tertentu
 budgetRoute.patch("/pockets/:categoryId/keywords", updateKeywordsController);
-// POST: Klasifikasi teks pengeluaran via AI (Grok)
-budgetRoute.post("/classify", classifyTransactionController);
+// POST: Klasifikasi teks pengeluaran via AI (Groq)
+budgetRoute.post("/classify", aiBudgetRateLimiter, classifyTransactionController);
 // ==========================================
 // 📅 MONTHLY HISTORY ROUTES
 // ==========================================

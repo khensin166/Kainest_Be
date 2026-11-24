@@ -1,12 +1,13 @@
 import { prisma } from "../../../infrastructure/database/prisma.js";
 import { logger } from "../../../infrastructure/logger/logger.js";
+import { clampLimit } from "../../../utils/securityHelpers.js";
 /**
  * GET /system-updates
  * Ambil changelog dari DB untuk frontend dashboard.
  */
 export async function getSystemUpdatesController(c) {
     try {
-        const limit = Number(c.req.query("limit") ?? 5);
+        const limit = clampLimit(c.req.query("limit"), 5, 50);
         const updates = await prisma.systemUpdate.findMany({
             orderBy: { date: "desc" },
             take: limit,

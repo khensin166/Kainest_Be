@@ -6,7 +6,7 @@ services:
     container_name: kainest-backend
     restart: always
     ports:
-      - "3001:3000" # Expose internal port 3000 to external port 3001
+      - "127.0.0.1:3001:3000" # Bind localhost saja agar trafik wajib lewat Caddy reverse proxy (TLS)
     env_file:
       - .env
     networks:

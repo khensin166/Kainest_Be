@@ -1,6 +1,7 @@
 // src/features/academicCalendar/presentation/academicCalendarRoute.ts
 import { Hono, type Context, type Next } from "hono";
 import { requireAdmin } from "../../../core/middlewares/role.middleware.js";
+import { timingSafeEqualStrings } from "../../../utils/securityHelpers.js";
 import {
   dispatchRemindersNowController,
   listAcademicEventsController,
@@ -17,10 +18,10 @@ import {
  */
 const requireAdminOrApiKey = async (c: Context, next: Next) => {
   const apiKey =
-    c.req.header("x-api-key") || c.req.header("Authorization")?.replace(/^Bearer\s+/i, "");
-  const validApiKey = process.env.WA_BOT_API_KEY;
+    c.req.header("x-api-key") || c.req.header("Authorization")?.replace(/^Bearer\s+/i, "") || "";
+  const validApiKey = process.env.ACADEMIC_API_KEY || process.env.WA_BOT_API_KEY;
 
-  if (validApiKey && apiKey && apiKey === validApiKey) {
+  if (validApiKey && apiKey && timingSafeEqualStrings(apiKey, validApiKey)) {
     await next();
     return;
   }
