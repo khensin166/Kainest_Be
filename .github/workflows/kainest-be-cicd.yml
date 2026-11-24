@@ -160,5 +160,7 @@ jobs:
             -e "academic_sync_batch_size=${{ vars.ACADEMIC_SYNC_BATCH_SIZE }}" \
             -e "academic_archive_retention_days=${{ vars.ACADEMIC_ARCHIVE_RETENTION_DAYS }}" \
             -e "academic_db_retention_days=${{ vars.ACADEMIC_DB_RETENTION_DAYS }}" \
-            -e "academic_mute_weekly_lecture=${{ vars.ACADEMIC_MUTE_WEEKLY_LECTURE }}"
+            -e "academic_mute_weekly_lecture=${{ vars.ACADEMIC_MUTE_WEEKLY_LECTURE }}" \
+            -e "ghcr_user=${{ github.actor }}" \
+            -e "ghcr_token=${{ secrets.GITHUB_TOKEN }}"
 
