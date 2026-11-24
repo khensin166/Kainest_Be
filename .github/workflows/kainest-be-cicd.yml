@@ -156,7 +156,7 @@ jobs:
             -e "receipt_ai_url=${{ vars.RECEIPT_AI_URL }}" \
             -e "academic_excel_download_url=${{ vars.ACADEMIC_EXCEL_DOWNLOAD_URL }}" \
             -e "academic_reminder_target_phone=${{ vars.ACADEMIC_REMINDER_TARGET_PHONE }}" \
-            -e "academic_sync_cron=${{ vars.ACADEMIC_SYNC_CRON }}" \
+            -e "{\"academic_sync_cron\":\"${{ vars.ACADEMIC_SYNC_CRON }}\"}" \
             -e "academic_sync_batch_size=${{ vars.ACADEMIC_SYNC_BATCH_SIZE }}" \
             -e "academic_archive_retention_days=${{ vars.ACADEMIC_ARCHIVE_RETENTION_DAYS }}" \
             -e "academic_db_retention_days=${{ vars.ACADEMIC_DB_RETENTION_DAYS }}" \

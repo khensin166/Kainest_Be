@@ -76,8 +76,19 @@ export const getMonthlySummaryUseCase = async (userId: string, payday?: number) 
     // 4. Ambil Realisasi Pengeluaran berdasarkan rentang siklus aktif (bukan awal/akhir bulan)
     const expenses = await budgetRepository.getMonthlyExpenseGrouped(userId, cycleStart, cycleEnd);
 
-    // 5. Gabungkan Data (Merge Snapshot + Expense)
-    const summary = pocketsSnapshot.map((pocket) => {
+    // 5. Gabungkan Data (Merge Snapshot + Expense, termasuk kategori di luar kantong agar totalSpent sinkron dengan WA & Rencana Keuangan)
+    const snapshotCategoryIds = new Set(pocketsSnapshot.map((p) => p.categoryId));
+    const summary: Array<{
+      categoryId: string;
+      categoryName: string;
+      icon: string;
+      limit: number;
+      spent: number;
+      remaining: number;
+      percentage_used: number;
+      status: string;
+      isUnpocketed?: boolean;
+    }> = pocketsSnapshot.map((pocket) => {
       const expense = expenses.find((e) => e.categoryId === pocket.categoryId);
       const spent = expense?._sum.amount || 0;
       const amountLimit = pocket.limitAmount || 0;
@@ -96,7 +107,32 @@ export const getMonthlySummaryUseCase = async (userId: string, payday?: number) 
       };
     });
 
-    // 6. Hitung Total Keseluruhan
+    // Sertakan pengeluaran pada kategori yang tidak punya kantong (mis. "Lain-lain")
+    const unpocketedExpenses = expenses.filter(
+      (e) => !snapshotCategoryIds.has(e.categoryId) && (e._sum.amount || 0) > 0
+    );
+    let unpocketedSpent = 0;
+    if (unpocketedExpenses.length > 0) {
+      const allCategories = await budgetRepository.findAllCategories(userId);
+      for (const exp of unpocketedExpenses) {
+        const spent = exp._sum.amount || 0;
+        unpocketedSpent += spent;
+        const cat = allCategories.find((c) => c.id === exp.categoryId);
+        summary.push({
+          categoryId: exp.categoryId,
+          categoryName: `${cat?.name || "Di luar kantong"} (Di luar kantong)`,
+          icon: cat?.icon || "📦",
+          limit: 0,
+          spent,
+          remaining: -spent,
+          percentage_used: 100,
+          status: "OVERBUDGET",
+          isUnpocketed: true,
+        });
+      }
+    }
+
+    // 6. Hitung Total Keseluruhan (semua pengeluaran termasuk kategori di luar kantong)
     const totalLimit = summary.reduce((acc, curr) => acc + curr.limit, 0);
     const totalSpent = summary.reduce((acc, curr) => acc + curr.spent, 0);
     const totalIncome = history?.totalIncome || 0;
@@ -150,6 +186,7 @@ export const getMonthlySummaryUseCase = async (userId: string, payday?: number) 
         totals: {
           limit: totalLimit,
           spent: totalSpent,
+          unpocketedSpent,
           additionalIncome: totalIncome,
           remaining: totalRemaining,
           unallocated: unallocated,

@@ -19,8 +19,10 @@ export function startAcademicCalendarScheduler() {
         return;
     }
     const repo = new AcademicCalendarRepository();
-    const syncCronExpr = process.env.ACADEMIC_SYNC_CRON || DEFAULT_SYNC_CRON;
-    const dispatchCronExpr = process.env.ACADEMIC_DISPATCH_CRON || DEFAULT_DISPATCH_CRON;
+    const rawSyncCron = (process.env.ACADEMIC_SYNC_CRON || "").trim();
+    const syncCronExpr = rawSyncCron.split(/\s+/).length >= 5 ? rawSyncCron : DEFAULT_SYNC_CRON;
+    const rawDispatchCron = (process.env.ACADEMIC_DISPATCH_CRON || "").trim();
+    const dispatchCronExpr = rawDispatchCron.split(/\s+/).length >= 5 ? rawDispatchCron : DEFAULT_DISPATCH_CRON;
     // Startup initialization & crash recovery
     void (async () => {
         try {
