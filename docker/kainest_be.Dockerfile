@@ -10,7 +10,7 @@ COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
 
 # Install dependencies
-RUN npm ci
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -18,7 +18,7 @@ COPY . .
 # Generate Prisma Client, Build TypeScript, and prune devDependencies
 RUN npm run postinstall
 RUN npm run build
-RUN npm prune --omit=dev
+RUN npm prune --omit=dev --legacy-peer-deps
 
 # Production Stage
 FROM node:20-alpine AS runner
